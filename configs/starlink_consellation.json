@@ -1,0 +1,17 @@
+{
+    "orbit_config": {
+        "earth_radius": 6378135.0,
+        "altitude": 550000.0,
+        "inclination": 53,
+        "min_ascension_angle": 0.0,
+        "max_ascension_angle": 15.0,
+        "number_of_orbits": 3,
+        "number_of_sattelites_per_orbit": 22,
+        "phase_diff_enabled": true
+    },
+    "satellite_config": {
+        "mean_motion_rev_per_day": 15.19,
+        "cone_radius": 940700,
+        "max_isl_length": 2508296
+    }
+}
