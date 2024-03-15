@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	"github.com/shayunak/SatSimGo/actors"
+	"github.com/umpc/go-sortedmap"
+	"github.com/umpc/go-sortedmap/asc"
 )
 
 type SatelliteList []actors.ISatellite
 
-func initSatellites(satellites *SatelliteList, config Config) {
+func initSatellites(satellites *SatelliteList, config Config, timeStep int) {
 	minAscensionAngle := config.OrbitConfig.MinAscensionAngle
 	maxAscensionAngle := config.OrbitConfig.MaxAscensionAngle
 	numberOfOrbits := config.OrbitConfig.NumberOfOrbits
@@ -28,17 +30,42 @@ func initSatellites(satellites *SatelliteList, config Config) {
 
 			*satellites = append(*satellites, actors.NewSatellite(id, config.OrbitConfig.Altitude,
 				config.OrbitConfig.EarthRadius, config.SatelliteConfig.MeanMotionRevPerDay,
-				anomaly, config.OrbitConfig.Inclination, ascensionNodeDegree))
+				anomaly, config.OrbitConfig.Inclination, ascensionNodeDegree, timeStep))
 
 		}
 	}
 }
 
-func SetupSimulator(configFileName string) {
+func initSpace(space *actors.ISpace, totalSimulationTime int, config Config) {
+	*space = actors.Space{
+		TimeStamp:              0,
+		TotalSimulationTime:    totalSimulationTime,
+		SpaceSatelliteChannels: make(actors.SpaceSatelliteChannels, 0),
+		Events:                 sortedmap.New(0, asc.Int),
+	}
+}
+
+func startSatellites(satellites SatelliteList) actors.SpaceSatelliteChannels {
+	channels := make(actors.SpaceSatelliteChannels, 0)
+	for _, satellite := range satellites {
+		channels = append(channels, satellite.GetSpaceChannel())
+		satellite.Run()
+	}
+	return channels
+}
+
+func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int) {
 	var satellites SatelliteList
+	var space actors.ISpace
+
+	// reading the config file
 	config := getConfig(configFileName)
 
-	initSatellites(&satellites, config)
+	// initializing the actors
+	initSatellites(&satellites, config, timeStep)
+	initSpace(&space, totalSimulationTime, config)
 
-	fmt.Println(satellites)
+	// starting the actors
+	space.SetSatelliteChannels(startSatellites(satellites))
+	space.Run()
 }
