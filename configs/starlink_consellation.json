@@ -1,4 +1,5 @@
 {
+    "name": "Starlink",
     "orbit_config": {
         "earth_radius": 6378135.0,
         "altitude": 550000.0,
@@ -6,7 +7,7 @@
         "min_ascension_angle": 0.0,
         "max_ascension_angle": 15.0,
         "number_of_orbits": 3,
-        "number_of_sattelites_per_orbit": 22,
+        "number_of_satellites_per_orbit": 22,
         "phase_diff_enabled": true
     },
     "satellite_config": {

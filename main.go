@@ -13,5 +13,6 @@ func main() {
 		fmt.Printf("One argument required, recieved %d!\n", len(args)-1)
 		os.Exit(1)
 	}
-	fmt.Println(setup.GetConfig(args[1]).ToString())
+
+	setup.SetupSimulator(args[1])
 }
