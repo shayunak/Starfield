@@ -1,8 +1,31 @@
 package actors
 
 import (
-	"github.com/umpc/go-sortedmap"
+	"encoding/csv"
+	"fmt"
+	"log"
+	"os"
+	"reflect"
+	"sort"
+	"sync"
+	"time"
 )
+
+type Space struct {
+	TotalSimulationTime    int
+	SpaceSatelliteChannels *SpaceSatelliteChannels
+	Events                 EventList
+	ConsellationName       string
+	TimeStep               int
+}
+
+type Event struct {
+	TimeStamp int
+	Id        string
+	X         float64
+	Y         float64
+	Z         float64
+}
 
 type UpdatePoisitionMessage struct {
 	SatelliteId string
@@ -14,34 +37,143 @@ type SpaceSatelliteChannel chan UpdatePoisitionMessage
 
 type SpaceSatelliteChannels []*SpaceSatelliteChannel
 
-type EventMapRecord sortedmap.Record
-
-type EventMap *sortedmap.SortedMap
+type EventList []IEvent
 
 type ISpace interface {
-	Run()
-	SetSatelliteChannels(channels SpaceSatelliteChannels)
+	Run(wg *sync.WaitGroup)
+	SetSatelliteChannels(channels *SpaceSatelliteChannels)
+	GetNumberOfSatellites() int
+	GetSatelliteChannels() *SpaceSatelliteChannels
+	GetTotalSimulationTime() int
+	addNewEvent(event *Event)
+	logSimulationSummary()
 }
 
-type Event struct {
-	TimeStamp int
-	Id        string
-	X         float64
-	Y         float64
-	Z         float64
+type IEvent interface {
+	getHeaders() []string
+	toSlice() []string
+	getTimeStamp() int
 }
 
-type Space struct {
-	TimeStamp              int
-	TotalSimulationTime    int
-	SpaceSatelliteChannels SpaceSatelliteChannels
-	Events                 EventMap
+func (event *Event) getTimeStamp() int {
+	return event.TimeStamp
 }
 
-func (space Space) Run() {
-
+func (event *Event) getHeaders() []string {
+	return []string{"TimeStamp", "Id", "X", "Y", "Z"}
 }
 
-func (space Space) SetSatelliteChannels(channels SpaceSatelliteChannels) {
+func (event *Event) toSlice() []string {
+	return []string{
+		fmt.Sprintf("%d", event.TimeStamp),
+		event.Id,
+		fmt.Sprintf("%f", event.X),
+		fmt.Sprintf("%f", event.Y),
+		fmt.Sprintf("%f", event.Z),
+	}
+}
+
+func initChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
+	channels := *space.GetSatelliteChannels()
+	for i, channel := range channels {
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(channel)}
+	}
+}
+
+func deleteSatellite(space ISpace, index int) {
+	satellites := *space.GetSatelliteChannels()
+	close(*satellites[index])
+	satellites = append(satellites[:index], satellites[index+1:]...)
+	space.SetSatelliteChannels(&satellites)
+}
+
+func startSpace(space ISpace, wg *sync.WaitGroup) {
+	selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
+	initChannelCases(&selectSatellitesCases, space)
+	for space.GetNumberOfSatellites() > 0 {
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			log.Default().Printf("Chosen channel: %d, unexpectedly closed!\n", chosen)
+		}
+		positionUpdateMessage := value.Interface().(UpdatePoisitionMessage)
+		if positionUpdateMessage.TimeStamp > space.GetTotalSimulationTime() {
+			log.Default().Println("Simulation time exceeded for satellite ", positionUpdateMessage.SatelliteId, "!")
+			deleteSatellite(space, chosen)
+		} else {
+			space.addNewEvent(&Event{
+				TimeStamp: positionUpdateMessage.TimeStamp,
+				Id:        positionUpdateMessage.SatelliteId,
+				X:         positionUpdateMessage.Position.X,
+				Y:         positionUpdateMessage.Position.Y,
+				Z:         positionUpdateMessage.Position.Z,
+			})
+		}
+	}
+	space.logSimulationSummary()
+	wg.Done()
+}
+
+func (space *Space) Run(wg *sync.WaitGroup) {
+	log.Default().Println("Running space...")
+	go startSpace(space, wg)
+}
+
+func (space *Space) GetTotalSimulationTime() int {
+	return space.TotalSimulationTime
+}
+
+func (space *Space) SetSatelliteChannels(channels *SpaceSatelliteChannels) {
 	space.SpaceSatelliteChannels = channels
+}
+
+func (space *Space) GetNumberOfSatellites() int {
+	return len(*space.SpaceSatelliteChannels)
+}
+
+func (space *Space) addNewEvent(event *Event) {
+	space.Events = append(space.Events, event)
+}
+
+func (space *Space) GetSatelliteChannels() *SpaceSatelliteChannels {
+	return space.SpaceSatelliteChannels
+}
+
+func getRowsFromEvents(events *EventList) [][]string {
+	var rows [][]string
+	for i, event := range *events {
+		if i == 0 {
+			rows = append(rows, event.getHeaders())
+		}
+		rows = append(rows, event.toSlice())
+	}
+	return rows
+}
+
+func (space *Space) logSimulationSummary() {
+	sort.SliceStable(space.Events, func(i, j int) bool {
+		return space.Events[i].getTimeStamp() < space.Events[j].getTimeStamp()
+	}) // Sorting events by timestamp
+
+	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
+		err := os.Mkdir("./generated", 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fileName := fmt.Sprintf("./generated/%s#%s#%dms#%ds.csv", time.Now().Format("YYYY-MM-DD HH:MM:SS"),
+		space.ConsellationName, space.TimeStep, space.TotalSimulationTime/1000)
+	outputFile, err := os.Create(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rows := getRowsFromEvents(&space.Events)
+	csvWriter := csv.NewWriter(outputFile)
+
+	if err := csvWriter.WriteAll(rows); err != nil {
+		log.Fatal(err)
+	}
+
+	outputFile.Close()
 }

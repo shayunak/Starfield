@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 
@@ -27,5 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	setup.SetupSimulator(args[1], timeStep, totalSimulationTime)
+	simulationDone := setup.SetupSimulator(args[1], timeStep, totalSimulationTime)
+
+	simulationDone.Wait() // waiting for the simulation to finish
+
+	log.Default().Println("Simulation Done...")
 }

@@ -2,10 +2,9 @@ package setup
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/shayunak/SatSimGo/actors"
-	"github.com/umpc/go-sortedmap"
-	"github.com/umpc/go-sortedmap/asc"
 )
 
 type SatelliteList []actors.ISatellite
@@ -36,36 +35,40 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int) {
 	}
 }
 
-func initSpace(space *actors.ISpace, totalSimulationTime int, config Config) {
-	*space = actors.Space{
-		TimeStamp:              0,
-		TotalSimulationTime:    totalSimulationTime,
-		SpaceSatelliteChannels: make(actors.SpaceSatelliteChannels, 0),
-		Events:                 sortedmap.New(0, asc.Int),
+func initSpace(space *actors.ISpace, totalSimulationTime int, config Config, timeStep int) {
+	*space = &actors.Space{
+		TotalSimulationTime:    totalSimulationTime * 1000, // to milliseconds
+		SpaceSatelliteChannels: nil,
+		Events:                 make(actors.EventList, 0),
+		ConsellationName:       config.ConsellationName,
+		TimeStep:               timeStep,
 	}
 }
 
-func startSatellites(satellites SatelliteList) actors.SpaceSatelliteChannels {
+func startSatellites(satellites SatelliteList) *actors.SpaceSatelliteChannels {
 	channels := make(actors.SpaceSatelliteChannels, 0)
 	for _, satellite := range satellites {
 		channels = append(channels, satellite.GetSpaceChannel())
 		satellite.Run()
 	}
-	return channels
+	return &channels
 }
 
-func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int) {
+func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int) *sync.WaitGroup {
 	var satellites SatelliteList
 	var space actors.ISpace
+	var simulationDone sync.WaitGroup
 
 	// reading the config file
 	config := getConfig(configFileName)
 
 	// initializing the actors
 	initSatellites(&satellites, config, timeStep)
-	initSpace(&space, totalSimulationTime, config)
+	initSpace(&space, totalSimulationTime, config, timeStep)
 
 	// starting the actors
 	space.SetSatelliteChannels(startSatellites(satellites))
-	space.Run()
+	space.Run(&simulationDone)
+
+	return &simulationDone
 }
