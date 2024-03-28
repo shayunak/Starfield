@@ -12,7 +12,7 @@ import (
 )
 
 type Space struct {
-	TotalSimulationTime    int
+	TotalSimulationTime    int // in milliseconds
 	SpaceSatelliteChannels *SpaceSatelliteChannels
 	Events                 EventList
 	ConsellationName       string
@@ -76,7 +76,7 @@ func (event *Event) toSlice() []string {
 func initChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
 	channels := *space.GetSatelliteChannels()
 	for i, channel := range channels {
-		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(channel)}
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
 }
 
@@ -88,9 +88,9 @@ func deleteSatellite(space ISpace, index int) {
 }
 
 func startSpace(space ISpace, wg *sync.WaitGroup) {
-	selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
-	initChannelCases(&selectSatellitesCases, space)
 	for space.GetNumberOfSatellites() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
+		initChannelCases(&selectSatellitesCases, space)
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
 			log.Default().Printf("Chosen channel: %d, unexpectedly closed!\n", chosen)
@@ -100,6 +100,8 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 			log.Default().Println("Simulation time exceeded for satellite ", positionUpdateMessage.SatelliteId, "!")
 			deleteSatellite(space, chosen)
 		} else {
+			satellites := *space.GetSatelliteChannels()
+			*satellites[chosen] <- positionUpdateMessage
 			space.addNewEvent(&Event{
 				TimeStamp: positionUpdateMessage.TimeStamp,
 				Id:        positionUpdateMessage.SatelliteId,
@@ -161,8 +163,10 @@ func (space *Space) logSimulationSummary() {
 		}
 	}
 
-	fileName := fmt.Sprintf("./generated/%s#%s#%dms#%ds.csv", time.Now().Format("YYYY-MM-DD HH:MM:SS"),
+	fileName := fmt.Sprintf("./generated/%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
 		space.ConsellationName, space.TimeStep, space.TotalSimulationTime/1000)
+
+	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)
 	if err != nil {
 		log.Fatal(err)

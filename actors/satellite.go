@@ -72,7 +72,13 @@ func (satellite *Satellite) checkChannelLiveness() bool {
 }
 
 func (orbit Orbit) convertToCartesian(anomaly float64) CartesianCoordinates {
-	return CartesianCoordinates{0.0, 0.0, 0.0}
+	return CartesianCoordinates{
+		X: orbit.Radius * (math.Cos(anomaly)*math.Cos(orbit.Ascension) -
+			math.Sin(anomaly)*math.Cos(orbit.Inclination)*math.Sin(orbit.Ascension)),
+		Y: orbit.Radius * (math.Cos(anomaly)*math.Sin(orbit.Ascension) +
+			math.Sin(anomaly)*math.Cos(orbit.Inclination)*math.Cos(orbit.Ascension)),
+		Z: orbit.Radius * math.Sin(anomaly) * math.Sin(orbit.Inclination),
+	}
 }
 
 func startSatellite(mySatellite ISatellite) {

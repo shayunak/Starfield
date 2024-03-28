@@ -54,10 +54,9 @@ func startSatellites(satellites SatelliteList) *actors.SpaceSatelliteChannels {
 	return &channels
 }
 
-func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int) *sync.WaitGroup {
+func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var space actors.ISpace
-	var simulationDone sync.WaitGroup
 
 	// reading the config file
 	config := getConfig(configFileName)
@@ -68,7 +67,5 @@ func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int
 
 	// starting the actors
 	space.SetSatelliteChannels(startSatellites(satellites))
-	space.Run(&simulationDone)
-
-	return &simulationDone
+	space.Run(simulationDone)
 }

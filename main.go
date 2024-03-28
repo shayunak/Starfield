@@ -5,12 +5,17 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/shayunak/SatSimGo/setup"
 )
 
 func main() {
 	args := os.Args
+	if len(args) == 2 && args[1] == "--help" {
+		fmt.Println("main.go [consellation config file] [time step (ms)] [total simulation time (s)]")
+		os.Exit(1)
+	}
 	if len(args) != 4 {
 		fmt.Printf("4 arguments required, recieved %d!\n", len(args)-1)
 		os.Exit(1)
@@ -28,7 +33,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	simulationDone := setup.SetupSimulator(args[1], timeStep, totalSimulationTime)
+	simulationDone := new(sync.WaitGroup)
+	simulationDone.Add(1)
+
+	setup.SetupSimulator(args[1], timeStep, totalSimulationTime, simulationDone)
 
 	simulationDone.Wait() // waiting for the simulation to finish
 
