@@ -20,16 +20,20 @@ type Space struct {
 }
 
 type Event struct {
-	TimeStamp int
-	Id        string
-	X         float64
-	Y         float64
-	Z         float64
+	TimeStamp   int
+	satelliteId string
+	orbitId     string
+	X           float64
+	Y           float64
+	Z           float64
+	Anomaly     float64
 }
 
 type UpdatePoisitionMessage struct {
 	SatelliteId string
+	OrbitId     string
 	Position    CartesianCoordinates
+	Anomaly     float64
 	TimeStamp   int
 }
 
@@ -60,16 +64,18 @@ func (event *Event) getTimeStamp() int {
 }
 
 func (event *Event) getHeaders() []string {
-	return []string{"TimeStamp", "Id", "X", "Y", "Z"}
+	return []string{"TimeStamp", "satelliteId", "orbitId", "X", "Y", "Z", "Anomaly"}
 }
 
 func (event *Event) toSlice() []string {
 	return []string{
 		fmt.Sprintf("%d", event.TimeStamp),
-		event.Id,
+		event.satelliteId,
+		event.orbitId,
 		fmt.Sprintf("%f", event.X),
 		fmt.Sprintf("%f", event.Y),
 		fmt.Sprintf("%f", event.Z),
+		fmt.Sprintf("%f", event.Anomaly),
 	}
 }
 
@@ -103,11 +109,13 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 			satellites := *space.GetSatelliteChannels()
 			*satellites[chosen] <- positionUpdateMessage
 			space.addNewEvent(&Event{
-				TimeStamp: positionUpdateMessage.TimeStamp,
-				Id:        positionUpdateMessage.SatelliteId,
-				X:         positionUpdateMessage.Position.X,
-				Y:         positionUpdateMessage.Position.Y,
-				Z:         positionUpdateMessage.Position.Z,
+				TimeStamp:   positionUpdateMessage.TimeStamp,
+				satelliteId: positionUpdateMessage.SatelliteId,
+				orbitId:     positionUpdateMessage.OrbitId,
+				X:           positionUpdateMessage.Position.X,
+				Y:           positionUpdateMessage.Position.Y,
+				Z:           positionUpdateMessage.Position.Z,
+				Anomaly:     positionUpdateMessage.Anomaly,
 			})
 		}
 	}

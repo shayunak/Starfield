@@ -16,7 +16,7 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int) {
 	numberOfSatellitesPerOrbit := config.OrbitConfig.NumberOfSatellitesPerOrbit
 
 	for orbit := 0; orbit < numberOfOrbits; orbit++ {
-		ascensionNodeDegree := minAscensionAngle + (maxAscensionAngle-minAscensionAngle)/float64(numberOfOrbits)
+		ascensionNodeDegree := minAscensionAngle + float64(orbit)*(maxAscensionAngle-minAscensionAngle)/float64(numberOfOrbits)
 
 		phase_shift := 0.0
 		if config.OrbitConfig.PhaseDiffEnabled && orbit%2 == 1 {

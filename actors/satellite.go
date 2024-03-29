@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"fmt"
 	"log"
 	"math"
 )
@@ -13,6 +14,7 @@ type CartesianCoordinates struct {
 
 type Orbit struct {
 	Radius      float64 // in meters
+	Altitude    float64 // in meters
 	Ascension   float64 // in radians
 	Inclination float64 // in radians
 }
@@ -52,6 +54,7 @@ func (satellite *Satellite) GetSpaceChannel() *SpaceSatelliteChannel {
 
 func (satellite *Satellite) updatePosition() {
 	satellite.OrbitalAnomaly += satellite.OrbitalMotion * float64(satellite.Dt) * 0.001 // milliseconds to seconds
+	satellite.Position = satellite.Orbit.convertToCartesian(satellite.OrbitalAnomaly)
 }
 
 func (satellite *Satellite) nextTimeStep() {
@@ -61,6 +64,8 @@ func (satellite *Satellite) nextTimeStep() {
 func (satellite *Satellite) updateSpaceOnPosition() {
 	(*satellite.SpaceChannel) <- UpdatePoisitionMessage{
 		SatelliteId: satellite.Id,
+		OrbitId:     satellite.Orbit.GetOrbitId(),
+		Anomaly:     satellite.OrbitalAnomaly,
 		Position:    satellite.Position,
 		TimeStamp:   satellite.TimeStamp,
 	}
@@ -79,6 +84,14 @@ func (orbit Orbit) convertToCartesian(anomaly float64) CartesianCoordinates {
 			math.Sin(anomaly)*math.Cos(orbit.Inclination)*math.Cos(orbit.Ascension)),
 		Z: orbit.Radius * math.Sin(anomaly) * math.Sin(orbit.Inclination),
 	}
+}
+
+func (orbit Orbit) GetOrbitId() string {
+	altitudeKM := int(orbit.Altitude * 0.001)
+	ascensionDegree := int(orbit.Ascension * 180.0 / math.Pi)
+	inclinationDegree := int(orbit.Inclination * 180.0 / math.Pi)
+
+	return fmt.Sprintf("%dkm-%d'-%d'", altitudeKM, ascensionDegree, inclinationDegree)
 }
 
 func startSatellite(mySatellite ISatellite) {
@@ -105,9 +118,10 @@ func NewSatellite(id string, orbitAltitude float64, earthRadius float64, orbital
 	newSatellite.OrbitalMotion = orbitalMotionRevPerDay * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
 	newSatellite.OrbitalAnomaly = orbitalPhase * (math.Pi / 180.0)
 	newSatellite.Orbit = Orbit{
-		orbitAltitude + earthRadius,
-		orbitAscension * (math.Pi / 180.0),
-		orbitInclination * (math.Pi / 180.0),
+		Radius:      orbitAltitude + earthRadius,
+		Altitude:    orbitAltitude,
+		Ascension:   orbitAscension * (math.Pi / 180.0),
+		Inclination: orbitInclination * (math.Pi / 180.0),
 	}
 	newSatellite.Position = newSatellite.Orbit.convertToCartesian(newSatellite.OrbitalAnomaly)
 
