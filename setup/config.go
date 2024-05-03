@@ -22,7 +22,6 @@ type OrbitConfig struct {
 type SatelliteConfig struct {
 	MeanMotionRevPerDay float64 `json:"mean_motion_rev_per_day"` // in number of revolutions per day
 	ConeRadius          float64 `json:"cone_radius"`             // in meters
-	MaxIslLength        float64 `json:"max_isl_length"`          // in meters
 }
 
 type Config struct {
@@ -48,8 +47,8 @@ func (orbitConfig OrbitConfig) toString() string {
 }
 
 func (satelliteConfig SatelliteConfig) toString() string {
-	return fmt.Sprintf("{ \n mean_motion_rev_per_day: %v, \n cone_radius: %v, \n max_isl_length: %v \n}",
-		satelliteConfig.MeanMotionRevPerDay, satelliteConfig.ConeRadius, satelliteConfig.MaxIslLength)
+	return fmt.Sprintf("{ \n mean_motion_rev_per_day: %v, \n cone_radius: %v \n}",
+		satelliteConfig.MeanMotionRevPerDay, satelliteConfig.ConeRadius)
 }
 
 /*

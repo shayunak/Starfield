@@ -12,7 +12,6 @@
     },
     "satellite_config": {
         "mean_motion_rev_per_day": 15.19,
-        "cone_radius": 940700,
-        "max_isl_length": 2508296
+        "cone_radius": 940700
     }
 }

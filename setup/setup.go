@@ -1,10 +1,11 @@
 package setup
 
 import (
-	"fmt"
+	"math"
 	"sync"
 
 	"github.com/shayunak/SatSimGo/actors"
+	"github.com/shayunak/SatSimGo/helpers"
 )
 
 type SatelliteList []actors.ISatellite
@@ -14,22 +15,46 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int) {
 	maxAscensionAngle := config.OrbitConfig.MaxAscensionAngle
 	numberOfOrbits := config.OrbitConfig.NumberOfOrbits
 	numberOfSatellitesPerOrbit := config.OrbitConfig.NumberOfSatellitesPerOrbit
+	inclinationRadians := config.OrbitConfig.Inclination * math.Pi / 180.0
+	orbit_radius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
+	maxIslLenght := 2 * math.Sqrt(math.Pow(orbit_radius, 2)-math.Pow(config.OrbitConfig.EarthRadius, 2))
+	ascensionStep := (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits)
+	anomalyStep := 360.0 / float64(numberOfSatellitesPerOrbit)
+	meanMotionRadiansPerSecond := config.SatelliteConfig.MeanMotionRevPerDay * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
+
+	orbitalCalc := &helpers.OrbitalCalculations{
+		InclinationSinus:   math.Sin(inclinationRadians),
+		InclinationCosinus: math.Cos(inclinationRadians),
+		LengthLimitRatio:   math.Pow(maxIslLenght/orbit_radius, 2) - 1.0,
+		AscensionStep:      ascensionStep * (math.Pi / 180.0),
+		NumberOfOrbits:     numberOfOrbits,
+	}
+
+	anomalyCalc := &helpers.AnomalyCalculations{
+		ConsellationName:           config.ConsellationName,
+		LengthLimitRatio:           math.Pow(maxIslLenght/orbit_radius, 2) - 1.0,
+		NumberOfSatellitesPerOrbit: numberOfSatellitesPerOrbit,
+		AnomalyStep:                anomalyStep * (math.Pi / 180.0),
+		MeanMotion:                 meanMotionRadiansPerSecond,
+		Radius:                     orbit_radius,
+		OrbitalCalculations:        orbitalCalc,
+	}
 
 	for orbit := 0; orbit < numberOfOrbits; orbit++ {
-		ascensionNodeDegree := minAscensionAngle + float64(orbit)*(maxAscensionAngle-minAscensionAngle)/float64(numberOfOrbits)
-
+		ascensionNodeDegree := minAscensionAngle + float64(orbit)*ascensionStep
 		phase_shift := 0.0
+
 		if config.OrbitConfig.PhaseDiffEnabled && orbit%2 == 1 {
-			phase_shift = 360.0 / (2.0 * float64(numberOfSatellitesPerOrbit))
+			phase_shift = anomalyStep / 2.0
 		}
 
-		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
-			anomaly := phase_shift + float64(satellite)*360.0/float64(numberOfSatellitesPerOrbit)
-			id := fmt.Sprintf("%s-%d-%d", config.ConsellationName, orbit, satellite)
+		orbit := helpers.NewOrbit(orbit_radius, config.OrbitConfig.Altitude, ascensionNodeDegree,
+			inclinationRadians, orbit, config.ConsellationName, phase_shift)
 
-			*satellites = append(*satellites, actors.NewSatellite(id, config.OrbitConfig.Altitude,
-				config.OrbitConfig.EarthRadius, config.SatelliteConfig.MeanMotionRevPerDay,
-				anomaly, config.OrbitConfig.Inclination, ascensionNodeDegree, timeStep))
+		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
+			anomaly := phase_shift + float64(satellite)*anomalyStep
+
+			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, orbit, anomalyCalc))
 
 		}
 	}

@@ -20,24 +20,19 @@ type Space struct {
 }
 
 type Event struct {
-	TimeStamp   int
-	satelliteId string
-	orbitId     string
-	X           float64
-	Y           float64
-	Z           float64
-	Anomaly     float64
+	TimeStamp         int
+	FirstSatelliteId  string
+	SecondSatelliteId string
+	Distance          float64
 }
 
-type UpdatePoisitionMessage struct {
-	SatelliteId string
-	OrbitId     string
-	Position    CartesianCoordinates
-	Anomaly     float64
-	TimeStamp   int
+type UpdateDistancesMessage struct {
+	SatelliteName string
+	TimeStamp     int
+	Distances     map[string]float64
 }
 
-type SpaceSatelliteChannel chan UpdatePoisitionMessage
+type SpaceSatelliteChannel chan UpdateDistancesMessage
 
 type SpaceSatelliteChannels []*SpaceSatelliteChannel
 
@@ -49,6 +44,7 @@ type ISpace interface {
 	GetNumberOfSatellites() int
 	GetSatelliteChannels() *SpaceSatelliteChannels
 	GetTotalSimulationTime() int
+	addNewEvents(distancesMessage UpdateDistancesMessage)
 	addNewEvent(event *Event)
 	logSimulationSummary()
 }
@@ -70,12 +66,9 @@ func (event *Event) getHeaders() []string {
 func (event *Event) toSlice() []string {
 	return []string{
 		fmt.Sprintf("%d", event.TimeStamp),
-		event.satelliteId,
-		event.orbitId,
-		fmt.Sprintf("%f", event.X),
-		fmt.Sprintf("%f", event.Y),
-		fmt.Sprintf("%f", event.Z),
-		fmt.Sprintf("%f", event.Anomaly),
+		event.FirstSatelliteId,
+		event.SecondSatelliteId,
+		fmt.Sprintf("%f", event.Distance),
 	}
 }
 
@@ -93,6 +86,18 @@ func deleteSatellite(space ISpace, index int) {
 	space.SetSatelliteChannels(&satellites)
 }
 
+func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
+	satellites := distancesMessage.Distances
+	for satelliteId, distance := range satellites {
+		space.addNewEvent(&Event{
+			TimeStamp:         distancesMessage.TimeStamp,
+			FirstSatelliteId:  distancesMessage.SatelliteName,
+			SecondSatelliteId: satelliteId,
+			Distance:          distance,
+		})
+	}
+}
+
 func startSpace(space ISpace, wg *sync.WaitGroup) {
 	for space.GetNumberOfSatellites() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
@@ -101,22 +106,14 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 		if !ok {
 			log.Default().Printf("Chosen channel: %d, unexpectedly closed!\n", chosen)
 		}
-		positionUpdateMessage := value.Interface().(UpdatePoisitionMessage)
-		if positionUpdateMessage.TimeStamp > space.GetTotalSimulationTime() {
-			log.Default().Println("Simulation time exceeded for satellite ", positionUpdateMessage.SatelliteId, "!")
+		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
+		if distanceUpdateMessage.TimeStamp > space.GetTotalSimulationTime() {
+			log.Default().Println("Simulation time exceeded for satellite ", distanceUpdateMessage.SatelliteName, "!")
 			deleteSatellite(space, chosen)
 		} else {
 			satellites := *space.GetSatelliteChannels()
-			*satellites[chosen] <- positionUpdateMessage
-			space.addNewEvent(&Event{
-				TimeStamp:   positionUpdateMessage.TimeStamp,
-				satelliteId: positionUpdateMessage.SatelliteId,
-				orbitId:     positionUpdateMessage.OrbitId,
-				X:           positionUpdateMessage.Position.X,
-				Y:           positionUpdateMessage.Position.Y,
-				Z:           positionUpdateMessage.Position.Z,
-				Anomaly:     positionUpdateMessage.Anomaly,
-			})
+			*satellites[chosen] <- distanceUpdateMessage
+			space.addNewEvents(distanceUpdateMessage)
 		}
 	}
 	space.logSimulationSummary()
