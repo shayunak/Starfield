@@ -28,6 +28,8 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int) {
 		LengthLimitRatio:   math.Pow(maxIslLenght/orbit_radius, 2) - 1.0,
 		AscensionStep:      ascensionStep * (math.Pi / 180.0),
 		NumberOfOrbits:     numberOfOrbits,
+		MinAscensionAngle:  minAscensionAngle,
+		MaxAscensionAngle:  maxAscensionAngle,
 	}
 
 	anomalyCalc := &helpers.AnomalyCalculations{
@@ -67,6 +69,7 @@ func initSpace(space *actors.ISpace, totalSimulationTime int, config Config, tim
 		Events:                 make(actors.EventList, 0),
 		ConsellationName:       config.ConsellationName,
 		TimeStep:               timeStep,
+		TimeStamp:              0,
 	}
 }
 

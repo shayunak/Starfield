@@ -17,6 +17,7 @@ type Space struct {
 	Events                 EventList
 	ConsellationName       string
 	TimeStep               int
+	TimeStamp              int
 }
 
 type Event struct {
@@ -95,6 +96,10 @@ func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
 			SecondSatelliteId: satelliteId,
 			Distance:          distance,
 		})
+	}
+	if space.TimeStamp < distancesMessage.TimeStamp {
+		space.TimeStamp = distancesMessage.TimeStamp
+		log.Default().Printf("Now moving to Timestamp: %d\n", space.TimeStamp)
 	}
 }
 

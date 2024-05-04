@@ -8,6 +8,8 @@ type OrbitalCalculations struct {
 	LengthLimitRatio   float64
 	NumberOfOrbits     int
 	AscensionStep      float64 // in radians
+	minAscensionAngle  float64 // in radians
+	maxAscensionAngle  float64 // in radians
 }
 
 type OrbitCalc struct {
