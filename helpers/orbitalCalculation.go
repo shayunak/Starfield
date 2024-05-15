@@ -8,8 +8,8 @@ type OrbitalCalculations struct {
 	LengthLimitRatio   float64
 	NumberOfOrbits     int
 	AscensionStep      float64 // in radians
-	minAscensionAngle  float64 // in radians
-	maxAscensionAngle  float64 // in radians
+	MinAscensionAngle  float64 // in radians
+	MaxAscensionAngle  float64 // in radians
 }
 
 type OrbitCalc struct {
@@ -19,6 +19,8 @@ type OrbitCalc struct {
 
 type IOrbitalCalculations interface {
 	FindOrbitsInRange(anomalyEl AnomalyElements, orbit_id int) map[int]OrbitCalc
+	isOrbitValid(orbitId int) bool
+	getRealOrbitId(id int, orbitId int) (int, float64)
 }
 
 func calculateLimits(lengthLimitRatio float64, inclinationSinus float64, inclinationCosinus float64,
@@ -45,7 +47,19 @@ func calculateSinalCoefficient(inclinationCosinus float64, inclinationSinus floa
 	return CosinalMultplication + SinalMultiplication
 }
 
-func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyElements, orbit_id int) map[int]OrbitCalc {
+func (orbitalCalc *OrbitalCalculations) isOrbitValid(id int) bool {
+	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+2*math.Pi, 2*math.Pi)
+	return ascensionCalculated >= orbitalCalc.MinAscensionAngle && ascensionCalculated < orbitalCalc.MaxAscensionAngle
+}
+
+func (orbitalCalc *OrbitalCalculations) getRealOrbitId(id int, orbitId int) (int, float64) {
+	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+2*math.Pi, 2*math.Pi)
+	realId := int((ascensionCalculated - orbitalCalc.MinAscensionAngle) / orbitalCalc.AscensionStep)
+	ascensionDiff := float64(orbitId-realId) * orbitalCalc.AscensionStep
+	return realId, ascensionDiff
+}
+
+func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyElements, orbitId int) map[int]OrbitCalc {
 	inRangeOrbits := make(map[int]OrbitCalc)
 
 	LD, LU := calculateLimits(orbitalCalc.LengthLimitRatio, orbitalCalc.InclinationSinus,
@@ -58,21 +72,23 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyEleme
 
 	// Calculate First Range
 	for i := firstRangeMin; i <= firstRangeMax; i++ {
-		id := (orbit_id + i + orbitalCalc.NumberOfOrbits) % orbitalCalc.NumberOfOrbits
-		ascensionDiff := -1 * orbitalCalc.AscensionStep * float64(i)
-		inRangeOrbits[id] = OrbitCalc{
-			CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
-			SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+		if orbitalCalc.isOrbitValid(orbitId + i) {
+			id, ascensionDiff := orbitalCalc.getRealOrbitId(orbitId+i, orbitId)
+			inRangeOrbits[id] = OrbitCalc{
+				CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
+				SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+			}
 		}
 	}
 
 	// Calculate Second Range
 	for i := secondRangeMin; i <= secondRangeMax; i++ {
-		id := (orbit_id + i + orbitalCalc.NumberOfOrbits) % orbitalCalc.NumberOfOrbits
-		ascensionDiff := -1 * orbitalCalc.AscensionStep * float64(i)
-		inRangeOrbits[id] = OrbitCalc{
-			CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
-			SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+		if orbitalCalc.isOrbitValid(orbitId + i) {
+			id, ascensionDiff := orbitalCalc.getRealOrbitId(orbitId+i, orbitId)
+			inRangeOrbits[id] = OrbitCalc{
+				CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
+				SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+			}
 		}
 	}
 
