@@ -12,6 +12,7 @@ type Satellite struct {
 	Name string
 	Id   int
 	// Position            helpers.CartesianCoordinates (Unnecessary for satellite distances calculations)
+	TotalSimulationTime int // in milliseconds
 	AnomalyElements     helpers.AnomalyElements
 	Orbit               helpers.IOrbit
 	SpaceChannel        *SpaceSatelliteChannel
@@ -24,10 +25,24 @@ type Satellite struct {
 type ISatellite interface {
 	Run()
 	GetSpaceChannel() *SpaceSatelliteChannel
+	GetName() string
+	getTimeStamp() int
+	getTotalSimulationTime() int
 	updatePosition()
 	updateSpaceOnDistances()
 	nextTimeStep()
-	checkChannelLiveness() bool
+}
+
+func (satellite *Satellite) GetName() string {
+	return satellite.Name
+}
+
+func (satellite *Satellite) getTimeStamp() int {
+	return satellite.TimeStamp
+}
+
+func (satellite *Satellite) getTotalSimulationTime() int {
+	return satellite.TotalSimulationTime
 }
 
 func (satellite *Satellite) Run() {
@@ -57,23 +72,17 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 	}
 }
 
-func (satellite *Satellite) checkChannelLiveness() bool {
-	_, ok := <-(*satellite.SpaceChannel)
-	return ok
-}
-
 func startSatellite(mySatellite ISatellite) {
-	for {
+	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
 		mySatellite.updateSpaceOnDistances()
-		if !mySatellite.checkChannelLiveness() {
-			break
-		}
 		mySatellite.nextTimeStep()
 		mySatellite.updatePosition()
 	}
+	close(*mySatellite.GetSpaceChannel())
+	log.Default().Println("Simulation time exceeded for satellite ", mySatellite.GetName())
 }
 
-func NewSatellite(id int, orbitalPhase float64, dt int, orbit helpers.IOrbit, anomalyCalculations helpers.IAnomalyCalculation) ISatellite {
+func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit, anomalyCalculations helpers.IAnomalyCalculation) ISatellite {
 	var newSatellite Satellite
 
 	spaceChannel := make(SpaceSatelliteChannel)
@@ -81,6 +90,7 @@ func NewSatellite(id int, orbitalPhase float64, dt int, orbit helpers.IOrbit, an
 	newSatellite.Id = id
 	newSatellite.Name = fmt.Sprintf("%s-%d", orbit.GetOrbitId(), id)
 	newSatellite.Dt = dt
+	newSatellite.TotalSimulationTime = totalSimulationTime
 	newSatellite.TimeStamp = 0
 	newSatellite.SpaceChannel = &spaceChannel
 	newSatellite.OrbitalAnomaly = orbitalPhase * (math.Pi / 180.0)

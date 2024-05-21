@@ -3,6 +3,7 @@
     "orbit_config": {
         "earth_radius": 6378135.0,
         "altitude": 550000.0,
+        "min_altitude_isl": 80000.0,
         "inclination": 53,
         "min_ascension_angle": 0.0,
         "max_ascension_angle": 15.0,

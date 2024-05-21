@@ -1,6 +1,8 @@
 package helpers
 
-import "math"
+import (
+	"math"
+)
 
 type OrbitalCalculations struct {
 	InclinationSinus   float64
@@ -29,8 +31,10 @@ func calculateLimits(lengthLimitRatio float64, inclinationSinus float64, inclina
 	ISLLengthLimit := math.Sqrt(1 - math.Pow(lengthLimitRatio, 2))
 	baseTrig := inclinationSinus * inclinationCosinus * anomalySinus
 	denominator := inclinationSinus * math.Sqrt(1-math.Pow(anomalySinus*inclinationSinus, 2))
+	lowerLimit := (baseTrig - ISLLengthLimit) / denominator
+	upperLimit := (baseTrig + ISLLengthLimit) / denominator
 
-	return math.Asin((baseTrig - ISLLengthLimit) / denominator), math.Asin((baseTrig + ISLLengthLimit) / denominator)
+	return math.Asin(math.Max(lowerLimit, -1)), math.Asin(math.Min(upperLimit, 1))
 }
 
 func calculateCosinalCoefficient(inclinationCosinus float64, anomalyEl AnomalyElements, ascensionDiff float64) float64 {
@@ -64,6 +68,7 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyEleme
 
 	LD, LU := calculateLimits(orbitalCalc.LengthLimitRatio, orbitalCalc.InclinationSinus,
 		orbitalCalc.InclinationCosinus, anomalyEl.AnomalySinus)
+
 	Phi := math.Atan(orbitalCalc.InclinationCosinus * anomalyEl.AnomalySinus / anomalyEl.AnomalyCosinus)
 	firstRangeMin := int(math.Ceil((Phi - LU) / orbitalCalc.AscensionStep))
 	firstRangeMax := int(math.Floor((Phi - LD) / orbitalCalc.AscensionStep))

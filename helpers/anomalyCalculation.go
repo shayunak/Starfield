@@ -25,11 +25,12 @@ type AnomalyCalculations struct {
 	MeanMotion                 float64 // in radians per second
 	Radius                     float64 // in meters
 	OrbitalCalculations        IOrbitalCalculations
+	PhaseDiffEnabled           bool
 }
 
 func (anomalyCalc *AnomalyCalculations) calculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64 {
 	return anomalyCalc.Radius * math.Sqrt(2*(orbitCalc.CosinalCoefficient*math.Cos(otherSatelliteAnomaly)+
-		orbitCalc.SinalCoefficient*math.Sin(otherSatelliteAnomaly)))
+		orbitCalc.SinalCoefficient*math.Sin(otherSatelliteAnomaly)+1))
 }
 
 func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]float64 {
@@ -38,10 +39,11 @@ func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbitCalc Or
 	orbitalCalcSize := math.Sqrt(math.Pow(orbitCalc.CosinalCoefficient, 2) + math.Pow(orbitCalc.SinalCoefficient, 2))
 	limitTerm := math.Acos(anomalyCalc.LengthLimitRatio / orbitalCalcSize)
 	phaseTerm := math.Atan(orbitCalc.SinalCoefficient / orbitCalc.CosinalCoefficient)
+
 	lowerRange := limitTerm - phaseTerm
 	upperRange := 2*math.Pi - limitTerm - phaseTerm
 	initialPhaseShift := 0.0
-	if orbit%2 == 1 {
+	if anomalyCalc.PhaseDiffEnabled && orbit%2 == 1 {
 		initialPhaseShift = anomalyCalc.AnomalyStep / 2.0
 	}
 	anomalyChangeInTime := math.Mod(timeStamp*anomalyCalc.MeanMotion, 2*math.Pi)
@@ -62,6 +64,7 @@ func (anomalyCalc *AnomalyCalculations) FindSatellitesInRange(anomalyEl AnomalyE
 	satellitesDistances := make(map[string]float64)
 	orbitsInRange := anomalyCalc.OrbitalCalculations.FindOrbitsInRange(anomalyEl, orbitId)
 	for orbit, orbitCalc := range orbitsInRange {
+		//satellitesDistances[fmt.Sprintf("%s-%d", anomalyCalc.ConsellationName, orbit)] = orbitCalc.CosinalCoefficient
 		satellites := anomalyCalc.calculateSatelliteIdInRange(orbitCalc, timeStamp, orbit)
 		for id, distance := range satellites {
 			sat_name := fmt.Sprintf("%s-%d-%d", anomalyCalc.ConsellationName, orbit, id)

@@ -11,6 +11,7 @@ import (
 type OrbitConfig struct {
 	EarthRadius                float64 `json:"earth_radius"`        // in meters
 	Altitude                   float64 `json:"altitude"`            // in meters
+	MinAltitudeISL             float64 `json:"min_altitude_isl"`    // in meters (for weather conditions)
 	Inclination                float64 `json:"inclination"`         // in meters
 	MinAscensionAngle          float64 `json:"min_ascension_angle"` // in degrees
 	MaxAscensionAngle          float64 `json:"max_ascension_angle"` // in meters
