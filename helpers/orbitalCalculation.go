@@ -17,6 +17,7 @@ type OrbitalCalculations struct {
 type OrbitCalc struct {
 	CosinalCoefficient float64
 	SinalCoefficient   float64
+	AscensionDiff      float64
 }
 
 type IOrbitalCalculations interface {
@@ -52,12 +53,12 @@ func calculateSinalCoefficient(inclinationCosinus float64, inclinationSinus floa
 }
 
 func (orbitalCalc *OrbitalCalculations) isOrbitValid(id int) bool {
-	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+2*math.Pi, 2*math.Pi)
+	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+orbitalCalc.MinAscensionAngle+2*math.Pi, 2*math.Pi)
 	return ascensionCalculated >= orbitalCalc.MinAscensionAngle && ascensionCalculated < orbitalCalc.MaxAscensionAngle
 }
 
 func (orbitalCalc *OrbitalCalculations) getRealOrbitId(id int, orbitId int) (int, float64) {
-	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+2*math.Pi, 2*math.Pi)
+	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(id)+orbitalCalc.MinAscensionAngle+2*math.Pi, 2*math.Pi)
 	realId := int((ascensionCalculated - orbitalCalc.MinAscensionAngle) / orbitalCalc.AscensionStep)
 	ascensionDiff := float64(orbitId-realId) * orbitalCalc.AscensionStep
 	return realId, ascensionDiff
@@ -82,6 +83,7 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyEleme
 			inRangeOrbits[id] = OrbitCalc{
 				CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
 				SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+				AscensionDiff:      ascensionDiff,
 			}
 		}
 	}
@@ -93,6 +95,7 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(anomalyEl AnomalyEleme
 			inRangeOrbits[id] = OrbitCalc{
 				CosinalCoefficient: calculateCosinalCoefficient(orbitalCalc.InclinationCosinus, anomalyEl, ascensionDiff),
 				SinalCoefficient:   calculateSinalCoefficient(orbitalCalc.InclinationCosinus, orbitalCalc.InclinationSinus, anomalyEl, ascensionDiff),
+				AscensionDiff:      ascensionDiff,
 			}
 		}
 	}

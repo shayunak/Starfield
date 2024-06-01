@@ -65,9 +65,10 @@ func (satellite *Satellite) nextTimeStep() {
 
 func (satellite *Satellite) updateSpaceOnDistances() {
 	(*satellite.SpaceChannel) <- UpdateDistancesMessage{
-		SatelliteName: satellite.Name,
-		TimeStamp:     satellite.TimeStamp,
-		Distances: satellite.AnomalyCalculations.FindSatellitesInRange(satellite.AnomalyElements,
+		SatelliteName:    satellite.Name,
+		SatelliteAnomaly: satellite.OrbitalAnomaly,
+		TimeStamp:        satellite.TimeStamp,
+		Distances: satellite.AnomalyCalculations.FindSatellitesInRange(satellite.OrbitalAnomaly, satellite.AnomalyElements,
 			satellite.Orbit.GetOrbitNumber(), float64(satellite.TimeStamp)*0.001),
 	}
 }
@@ -97,8 +98,8 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 	newSatellite.AnomalyCalculations = anomalyCalculations
 	newSatellite.Orbit = orbit
 	newSatellite.AnomalyElements = helpers.AnomalyElements{
-		AnomalySinus:   math.Sin(orbitalPhase),
-		AnomalyCosinus: math.Cos(orbitalPhase),
+		AnomalySinus:   math.Sin(newSatellite.OrbitalAnomaly),
+		AnomalyCosinus: math.Cos(newSatellite.OrbitalAnomaly),
 	}
 
 	return &newSatellite

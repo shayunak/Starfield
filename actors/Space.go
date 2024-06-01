@@ -28,9 +28,10 @@ type Event struct {
 }
 
 type UpdateDistancesMessage struct {
-	SatelliteName string
-	TimeStamp     int
-	Distances     map[string]float64
+	SatelliteName    string
+	SatelliteAnomaly float64
+	TimeStamp        int
+	Distances        map[string]float64
 }
 
 type SpaceSatelliteChannel chan UpdateDistancesMessage
@@ -61,6 +62,8 @@ func (event *Event) getTimeStamp() int {
 }
 
 func (event *Event) getHeaders() []string {
+	/*return []string{"TimeStamp", "FirstSatelliteId", "FirstSatelliteAnomaly", "SecondSatelliteId", "SecondSatelliteAnomaly",
+	"AscensionDiff", "A", "B", "Distance"}*/
 	return []string{"TimeStamp", "FirstSatelliteId", "SecondSatelliteId", "Distance"}
 }
 
@@ -98,7 +101,6 @@ func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
 	}
 	if space.TimeStamp < distancesMessage.TimeStamp {
 		space.TimeStamp = distancesMessage.TimeStamp
-		log.Default().Printf("Now moving to Timestamp: %d\n", space.TimeStamp)
 	}
 }
 

@@ -27,7 +27,7 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int, tota
 	orbitalCalc := &helpers.OrbitalCalculations{
 		InclinationSinus:   math.Sin(inclinationRadians),
 		InclinationCosinus: math.Cos(inclinationRadians),
-		LengthLimitRatio:   math.Pow(maxIslLenght/orbit_radius, 2)/2 - 1.0,
+		LengthLimitRatio:   1.0 - math.Pow(maxIslLenght/orbit_radius, 2)/2,
 		AscensionStep:      ascensionStep * (math.Pi / 180.0),
 		NumberOfOrbits:     numberOfOrbits,
 		MinAscensionAngle:  minAscensionAngle * math.Pi / 180.0,
@@ -36,7 +36,7 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int, tota
 
 	anomalyCalc := &helpers.AnomalyCalculations{
 		ConsellationName:           config.ConsellationName,
-		LengthLimitRatio:           math.Pow(maxIslLenght/orbit_radius, 2)/2 - 1.0,
+		LengthLimitRatio:           1.0 - math.Pow(maxIslLenght/orbit_radius, 2)/2,
 		NumberOfSatellitesPerOrbit: numberOfSatellitesPerOrbit,
 		AnomalyStep:                anomalyStep * (math.Pi / 180.0),
 		MeanMotion:                 meanMotionRadiansPerSecond,
