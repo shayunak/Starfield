@@ -20,6 +20,10 @@
 # Go workspace file
 go.work
 
+#python cache
+*.pyc
+*.pyo
+
 #Generate Simulation
 generated/*
 forwarding_table/*

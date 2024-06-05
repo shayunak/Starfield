@@ -10,7 +10,7 @@ def read_distance_file(filename):
     time_step = int(splited_filename[3][:-2])
     total_time = int(splited_filename[4][:-1]) * 1000
     simulation_details = f"{splited_filename[2]}#{splited_filename[3]}#{splited_filename[4]}"
-    distance_csv_dataframe = pd.read_csv(f"../generated/{filename}")
+    distance_csv_dataframe = pd.read_csv(f"./generated/{filename}")
 
     return distance_csv_dataframe, time_step, total_time, simulation_details
 
