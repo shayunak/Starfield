@@ -23,6 +23,7 @@ go.work
 #python cache
 *.pyc
 *.pyo
+shortest_path_forwarding/__pycache__/*
 
 #Generate Simulation
 generated/*
