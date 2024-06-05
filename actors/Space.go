@@ -167,8 +167,8 @@ func (space *Space) logSimulationSummary() {
 		}
 	}
 
-	fileName := fmt.Sprintf("./generated/%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
-		space.ConsellationName, space.TimeStep, space.TotalSimulationTime/1000)
+	fileName := fmt.Sprintf("./generated/Distances#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		space.ConsellationName, space.TimeStep, space.TotalSimulationTime)
 
 	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)

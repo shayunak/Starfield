@@ -68,7 +68,7 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 		SatelliteName:    satellite.Name,
 		SatelliteAnomaly: satellite.OrbitalAnomaly,
 		TimeStamp:        satellite.TimeStamp,
-		Distances: satellite.AnomalyCalculations.FindSatellitesInRange(satellite.OrbitalAnomaly, satellite.AnomalyElements,
+		Distances: satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Id, satellite.OrbitalAnomaly, satellite.AnomalyElements,
 			satellite.Orbit.GetOrbitNumber(), float64(satellite.TimeStamp)*0.001),
 	}
 }
