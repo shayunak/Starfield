@@ -27,10 +27,4 @@ def generate_graph_from_timestamp_data(timeStamp, dataframe):
 
     return distance_graph
 
-def generate_graphs(dataframe, time_step, total_time):
-    graphs = []
-    for timestamp in range(0, total_time + 1, time_step):
-        graphs.append((timestamp, generate_graph_from_timestamp_data(timestamp, dataframe)))
-
-    return graphs
 

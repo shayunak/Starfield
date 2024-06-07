@@ -29,9 +29,8 @@ if __name__ == "__main__":
     distance_file_name = sys.argv[1]
     distance_csv_dataframe, time_step, total_time, simulation_details = dfg.read_distance_file(distance_file_name)
     forwarding_file, forwarding_output_writer = forwarding_table_csv_file(simulation_details)
-    graphs = dfg.generate_graphs(distance_csv_dataframe, time_step, total_time)
-    print(f"Generated graphs for each timestamp...")
-    for graph in graphs:
-        calculate_shortest_path_hops(forwarding_output_writer, graph[0], graph[1])
-        print(f"Calculated forwarding table for timestamp {graph[0]}...")
+    for timestamp in range(0, total_time + 1, time_step):
+        graph = dfg.generate_graph_from_timestamp_data(timestamp, distance_csv_dataframe)
+        calculate_shortest_path_hops(forwarding_output_writer, timestamp, graph)
+        print(f"Calculated forwarding table for timestamp {timestamp}...")
     forwarding_file.close()
