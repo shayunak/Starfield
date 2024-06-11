@@ -54,10 +54,18 @@ func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(currentAnoma
 	limitTerm := math.Asin(anomalyCalc.LengthLimitRatio / orbitalCalcSize)
 	phaseTerm := math.Atan(orbitCalc.CosinalCoefficient / orbitCalc.SinalCoefficient)
 
+	if orbitCalc.AscensionDiff < math.Pi && boundedAnomaly >= math.Pi {
+		phaseTerm += math.Pi
+	}
+
+	if orbitCalc.AscensionDiff >= math.Pi && boundedAnomaly < math.Pi {
+		phaseTerm += math.Pi
+	}
+
 	lowerRange := phaseTerm + limitTerm
 	upperRange := math.Pi - limitTerm + phaseTerm
 
-	if boundedAnomaly >= upperRange {
+	if boundedAnomaly >= math.Pi {
 		lowerRange += math.Pi
 		upperRange += math.Pi
 	}

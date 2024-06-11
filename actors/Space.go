@@ -41,6 +41,7 @@ type SpaceSatelliteChannels []*SpaceSatelliteChannel
 type EventList []IEvent
 
 type ISpace interface {
+	RunDistances(wg *sync.WaitGroup)
 	Run(wg *sync.WaitGroup)
 	SetSatelliteChannels(channels *SpaceSatelliteChannels)
 	GetNumberOfSatellites() int
@@ -105,6 +106,14 @@ func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
 }
 
 func startSpace(space ISpace, wg *sync.WaitGroup) {
+	channels := space.GetSatelliteChannels()
+	for _, channel := range *channels {
+		close(*channel)
+	}
+	wg.Done()
+}
+
+func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
 	for space.GetNumberOfSatellites() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
 		initChannelCases(&selectSatellitesCases, space)
@@ -117,6 +126,11 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 	}
 	space.logSimulationSummary()
 	wg.Done()
+}
+
+func (space *Space) RunDistances(wg *sync.WaitGroup) {
+	log.Default().Println("Running Distance Analyzer...")
+	go startDistancesSpace(space, wg)
 }
 
 func (space *Space) Run(wg *sync.WaitGroup) {

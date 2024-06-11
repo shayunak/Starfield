@@ -1,12 +1,17 @@
 package actors
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"strconv"
 
 	"github.com/shayunak/SatSimGo/helpers"
 )
+
+type ForwardingEntry map[string]string
 
 type Satellite struct {
 	Name string
@@ -19,11 +24,15 @@ type Satellite struct {
 	Dt                  int     // in milliseconds
 	TimeStamp           int     // in milliseconds
 	OrbitalAnomaly      float64 // in radians
+	ForwardingFile      string
+	ForwardingTable     map[int]ForwardingEntry
 	AnomalyCalculations helpers.IAnomalyCalculation
 }
 
 type ISatellite interface {
 	Run()
+	RunDistances()
+	SetForwardingFile(folder string)
 	GetSpaceChannel() *SpaceSatelliteChannel
 	GetName() string
 	getTimeStamp() int
@@ -31,6 +40,11 @@ type ISatellite interface {
 	updatePosition()
 	updateSpaceOnDistances()
 	nextTimeStep()
+	loadForwardingTableInMemory()
+}
+
+func (satellite *Satellite) SetForwardingFile(folder string) {
+	satellite.ForwardingFile = fmt.Sprintf("./forwarding_table/%s/%s.csv", folder, satellite.Name)
 }
 
 func (satellite *Satellite) GetName() string {
@@ -45,9 +59,41 @@ func (satellite *Satellite) getTotalSimulationTime() int {
 	return satellite.TotalSimulationTime
 }
 
+func (satellite *Satellite) RunDistances() {
+	log.Default().Println("Running satellite (Distance Mode): ", satellite.Id)
+	go startSatelliteDistances(satellite)
+}
+
 func (satellite *Satellite) Run() {
 	log.Default().Println("Running satellite: ", satellite.Id)
 	go startSatellite(satellite)
+}
+
+func (satellite *Satellite) loadForwardingTableInMemory() {
+	satellite.ForwardingTable = make(map[int]ForwardingEntry)
+
+	file, err := os.Open(satellite.ForwardingFile)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
+	// ignore the header
+	_, _ = reader.Read()
+	// read the data
+	records, _ := reader.ReadAll()
+
+	for _, record := range records {
+		timeStamp, _ := strconv.Atoi(record[0])
+		if satellite.ForwardingTable[timeStamp] == nil {
+			satellite.ForwardingTable[timeStamp] = make(ForwardingEntry)
+		}
+		satellite.ForwardingTable[timeStamp][record[1]] = record[2]
+	}
 }
 
 func (satellite *Satellite) GetSpaceChannel() *SpaceSatelliteChannel {
@@ -73,16 +119,6 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 	}
 }
 
-func startSatellite(mySatellite ISatellite) {
-	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
-		mySatellite.updateSpaceOnDistances()
-		mySatellite.nextTimeStep()
-		mySatellite.updatePosition()
-	}
-	close(*mySatellite.GetSpaceChannel())
-	log.Default().Println("Simulation time exceeded for satellite ", mySatellite.GetName())
-}
-
 func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit, anomalyCalculations helpers.IAnomalyCalculation) ISatellite {
 	var newSatellite Satellite
 
@@ -103,4 +139,17 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 	}
 
 	return &newSatellite
+}
+
+func startSatelliteDistances(mySatellite ISatellite) {
+	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
+		mySatellite.updateSpaceOnDistances()
+		mySatellite.nextTimeStep()
+		mySatellite.updatePosition()
+	}
+	close(*mySatellite.GetSpaceChannel())
+}
+
+func startSatellite(mySatellite ISatellite) {
+	mySatellite.loadForwardingTableInMemory()
 }

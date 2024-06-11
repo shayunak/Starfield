@@ -8,6 +8,9 @@ import (
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
+const SIMULATION_MODE int = 0
+const DISTANCES_GENERATE_MODE int = 1
+
 type SatelliteList []actors.ISatellite
 
 func initSatellites(satellites *SatelliteList, config Config, timeStep int, totalSimulationTime int) {
@@ -76,16 +79,21 @@ func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulatio
 	}
 }
 
-func startSatellites(satellites SatelliteList) *actors.SpaceSatelliteChannels {
+func startSatellites(satellites SatelliteList, mode int) *actors.SpaceSatelliteChannels {
 	channels := make(actors.SpaceSatelliteChannels, 0)
 	for _, satellite := range satellites {
 		channels = append(channels, satellite.GetSpaceChannel())
-		satellite.Run()
+		switch mode {
+		case DISTANCES_GENERATE_MODE:
+			satellite.RunDistances()
+		case SIMULATION_MODE:
+			satellite.Run()
+		}
 	}
 	return &channels
 }
 
-func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
+func SetupSimulatorDistances(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var space actors.ISpace
 
@@ -97,6 +105,28 @@ func SetupSimulator(configFileName string, timeStep int, totalSimulationTime int
 	initSpace(&space, config, timeStep, totalSimulationTime)
 
 	// starting the actors
-	space.SetSatelliteChannels(startSatellites(satellites))
+	space.SetSatelliteChannels(startSatellites(satellites, DISTANCES_GENERATE_MODE))
+	space.RunDistances(simulationDone)
+}
+
+func SetupSimulatorDijkstraSimulation(configFileName string, forwardingFolder string, timeStep int,
+	totalSimulationTime int, simulationDone *sync.WaitGroup) {
+	var satellites SatelliteList
+	var space actors.ISpace
+
+	// reading the config file
+	config := getConfig(configFileName)
+
+	// initializing the actors
+	initSatellites(&satellites, config, timeStep, totalSimulationTime)
+	initSpace(&space, config, timeStep, totalSimulationTime)
+
+	// adding forwarding file data to satellites
+	for _, satellite := range satellites {
+		satellite.SetForwardingFile(forwardingFolder)
+	}
+
+	// starting the actors
+	space.SetSatelliteChannels(startSatellites(satellites, SIMULATION_MODE))
 	space.Run(simulationDone)
 }
