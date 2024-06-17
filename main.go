@@ -31,7 +31,7 @@ func calculateDistancesSettingsRun(consellationFile string, timeStepString strin
 	simulationDone.Wait() // waiting for the simulation to finish
 }
 
-func dijkstraSettingsRun(consellationFile string, forwardingFolder string, timeStepString string, totalSimulationTimeString string) {
+func forwardingSettingsRun(consellationFile string, trafficFile string, forwardingFolder string, timeStepString string, totalSimulationTimeString string) {
 	timeStep, error := strconv.Atoi(timeStepString)
 	if error != nil {
 		fmt.Printf("3rd argument must be an integer, recieved %s!\n", timeStepString)
@@ -47,7 +47,7 @@ func dijkstraSettingsRun(consellationFile string, forwardingFolder string, timeS
 	simulationDone := new(sync.WaitGroup)
 	simulationDone.Add(1)
 
-	setup.SetupSimulatorDijkstraSimulation(consellationFile, forwardingFolder, timeStep, totalSimulationTime, simulationDone)
+	setup.SetupForwardingSimulation(consellationFile, trafficFile, forwardingFolder, timeStep, totalSimulationTime, simulationDone)
 
 	simulationDone.Wait() // waiting for the simulation to finish
 }
@@ -57,13 +57,13 @@ func main() {
 	if len(args) == 2 && args[1] == "--help" {
 		fmt.Println("main.go --help")
 		fmt.Println("main.go --distances [consellation config file] [time step (ms)] [total simulation time (s)]")
-		fmt.Println("main.go --dijkstra [consellation config file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
+		fmt.Println("main.go --forwarding [consellation config file] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
 		os.Exit(1)
 	} else if len(args) == 5 && args[1] == "--distances" {
 		calculateDistancesSettingsRun(args[2], args[3], args[4])
 		log.Default().Println("Distances Generated...")
-	} else if len(args) == 6 && args[1] == "--dijkstra" {
-		dijkstraSettingsRun(args[2], args[3], args[4], args[5])
+	} else if len(args) == 7 && args[1] == "--forwarding" {
+		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6])
 		log.Default().Println("Simulation Done...")
 	} else {
 		fmt.Println("Invalid Option!")

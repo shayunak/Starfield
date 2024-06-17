@@ -8,8 +8,15 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
 )
+
+type TrafficEntry struct {
+	Destination string
+	TimeStamp   int // in milliseconds
+	Length      int // in bits
+}
 
 type ForwardingEntry map[string]string
 
@@ -27,6 +34,7 @@ type Satellite struct {
 	ForwardingFile      string
 	ForwardingTable     map[int]ForwardingEntry
 	AnomalyCalculations helpers.IAnomalyCalculation
+	ISLInterfaces       []connections.INetworkInterface
 }
 
 type ISatellite interface {
@@ -35,6 +43,7 @@ type ISatellite interface {
 	SetForwardingFile(folder string)
 	GetSpaceChannel() *SpaceSatelliteChannel
 	GetName() string
+	GenerateTraffic(traffic []TrafficEntry)
 	getTimeStamp() int
 	getTotalSimulationTime() int
 	updatePosition()
@@ -57,6 +66,10 @@ func (satellite *Satellite) getTimeStamp() int {
 
 func (satellite *Satellite) getTotalSimulationTime() int {
 	return satellite.TotalSimulationTime
+}
+
+func (satellite *Satellite) GenerateTraffic(traffic []TrafficEntry) {
+
 }
 
 func (satellite *Satellite) RunDistances() {
@@ -152,4 +165,7 @@ func startSatelliteDistances(mySatellite ISatellite) {
 
 func startSatellite(mySatellite ISatellite) {
 	mySatellite.loadForwardingTableInMemory()
+	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
+
+	}
 }

@@ -109,7 +109,7 @@ func SetupSimulatorDistances(configFileName string, timeStep int, totalSimulatio
 	space.RunDistances(simulationDone)
 }
 
-func SetupSimulatorDijkstraSimulation(configFileName string, forwardingFolder string, timeStep int,
+func SetupForwardingSimulation(configFileName string, trafficFile string, forwardingFolder string, timeStep int,
 	totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var space actors.ISpace
@@ -120,6 +120,9 @@ func SetupSimulatorDijkstraSimulation(configFileName string, forwardingFolder st
 	// initializing the actors
 	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 	initSpace(&space, config, timeStep, totalSimulationTime)
+
+	// reading the traffic file
+	loadTrafficOnNodes(trafficFile, &satellites)
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {
