@@ -84,6 +84,7 @@ func startDistancesSatellites(satellites SatelliteList) *actors.DistanceSpaceSat
 		channel := make(actors.DistanceSpaceSatelliteChannel)
 		channels = append(channels, &channel)
 		satellite.SetDistanceSpaceChannel(&channel)
+		satellite.RunDistances()
 	}
 	return &channels
 }

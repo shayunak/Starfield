@@ -173,7 +173,7 @@ func startSatelliteDistances(mySatellite ISatellite) {
 		mySatellite.nextTimeStep()
 		mySatellite.updatePosition()
 	}
-	close(*mySatellite.GetSpaceChannel())
+	close(*mySatellite.GetDistanceSpaceChannel())
 }
 
 func startSatellite(mySatellite ISatellite) {

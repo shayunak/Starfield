@@ -187,11 +187,11 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 	for space.GetNumberOfSatellites() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
 		initChannelCases(&selectSatellitesCases, space)
-		chosen, value, ok := reflect.Select(selectSatellitesCases)
-		if !ok {
-			deleteSatellite(space, chosen)
-		}
-		newLinkRequest := value.Interface().(NewLinkChannelRequest)
+		//chosen, value, ok := reflect.Select(selectSatellitesCases)
+		//if !ok {
+		//	deleteSatellite(space, chosen)
+		//}
+		//newLinkRequest := value.Interface().(NewLinkChannelRequest)
 	}
 	wg.Done()
 }
