@@ -6,11 +6,12 @@ type ILink interface {
 }
 
 type NetworkInterface struct {
-	InterfaceId       int
-	SendChannel       chan Packet
-	ReceiveChannel    chan Packet
-	Link              ILink
-	DeviceConnectedTo string
+	InterfaceId        int
+	SendChannel        chan Packet
+	ReceiveChannel     chan Packet
+	Link               ILink
+	DeviceConnectedTo  string
+	LastPacketSentTime int
 }
 
 type INetworkInterface interface {

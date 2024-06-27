@@ -23,6 +23,11 @@ type OrbitConfig struct {
 type SatelliteConfig struct {
 	MeanMotionRevPerDay float64 `json:"mean_motion_rev_per_day"` // in number of revolutions per day
 	ConeRadius          float64 `json:"cone_radius"`             // in meters
+	NumberOfISLs        int     `json:"number_of_isls"`
+	NumberOfGSLs        int     `json:"number of GSLs"`
+	ISLBandwidth        float64 `json:"isl_bandwidth"`        // in Mbps
+	ISLLinkNoiseCoef    float64 `json:"isl_link_noise_coef"`  // in km^2
+	ISLAcquisitionTime  float64 `json:"isl_acquisition_time"` // in seconds
 }
 
 type Config struct {

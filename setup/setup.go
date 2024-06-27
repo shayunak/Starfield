@@ -8,9 +8,6 @@ import (
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
-const SIMULATION_MODE int = 0
-const DISTANCES_GENERATE_MODE int = 1
-
 type SatelliteList []actors.ISatellite
 
 func initSatellites(satellites *SatelliteList, config Config, timeStep int, totalSimulationTime int) {
@@ -70,27 +67,37 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int, tota
 
 func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int) {
 	*space = &actors.Space{
-		TotalSimulationTime:    totalSimulationTime,
-		SpaceSatelliteChannels: nil,
-		Events:                 make(actors.EventList, 0),
-		ConsellationName:       config.ConsellationName,
-		TimeStep:               timeStep,
-		TimeStamp:              0,
+		TotalSimulationTime:             totalSimulationTime,
+		SpaceSatelliteChannels:          nil,
+		DistancesSpaceSatelliteChannels: nil,
+		SatelliteNames:                  nil,
+		DistanceEntries:                 make(helpers.DistanceEntryList, 0),
+		ConsellationName:                config.ConsellationName,
+		TimeStep:                        timeStep,
+		TimeStamp:                       0,
 	}
 }
 
-func startSatellites(satellites SatelliteList, mode int) *actors.SpaceSatelliteChannels {
-	channels := make(actors.SpaceSatelliteChannels, 0)
+func startDistancesSatellites(satellites SatelliteList) *actors.DistanceSpaceSatelliteChannels {
+	channels := make(actors.DistanceSpaceSatelliteChannels, 0)
 	for _, satellite := range satellites {
-		channels = append(channels, satellite.GetSpaceChannel())
-		switch mode {
-		case DISTANCES_GENERATE_MODE:
-			satellite.RunDistances()
-		case SIMULATION_MODE:
-			satellite.Run()
-		}
+		channel := make(actors.DistanceSpaceSatelliteChannel)
+		channels = append(channels, &channel)
+		satellite.SetDistanceSpaceChannel(&channel)
 	}
 	return &channels
+}
+
+func startSatellites(satellites SatelliteList) (*actors.SpaceSatelliteChannels, []string) {
+	channels := make(actors.SpaceSatelliteChannels, 0)
+	satelliteNames := make([]string, 0)
+	for _, satellite := range satellites {
+		channel := make(actors.SpaceSatelliteChannel)
+		channels = append(channels, &channel)
+		satelliteNames = append(satelliteNames, satellite.GetName())
+		satellite.SetSpaceChannel(&channel)
+	}
+	return &channels, satelliteNames
 }
 
 func SetupSimulatorDistances(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
@@ -101,11 +108,11 @@ func SetupSimulatorDistances(configFileName string, timeStep int, totalSimulatio
 	config := getConfig(configFileName)
 
 	// initializing the actors
-	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 	initSpace(&space, config, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 
 	// starting the actors
-	space.SetSatelliteChannels(startSatellites(satellites, DISTANCES_GENERATE_MODE))
+	space.SetDistancesSatelliteChannels(startDistancesSatellites(satellites))
 	space.RunDistances(simulationDone)
 }
 
@@ -118,8 +125,8 @@ func SetupForwardingSimulation(configFileName string, trafficFile string, forwar
 	config := getConfig(configFileName)
 
 	// initializing the actors
-	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 	initSpace(&space, config, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 
 	// reading the traffic file
 	loadTrafficOnNodes(trafficFile, &satellites)
@@ -130,6 +137,6 @@ func SetupForwardingSimulation(configFileName string, trafficFile string, forwar
 	}
 
 	// starting the actors
-	space.SetSatelliteChannels(startSatellites(satellites, SIMULATION_MODE))
+	space.SetSatelliteChannels(startSatellites(satellites))
 	space.Run(simulationDone)
 }

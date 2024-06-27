@@ -24,17 +24,18 @@ type Satellite struct {
 	Name string
 	Id   int
 	// Position            helpers.CartesianCoordinates (Unnecessary for satellite distances calculations)
-	TotalSimulationTime int // in milliseconds
-	AnomalyElements     helpers.AnomalyElements
-	Orbit               helpers.IOrbit
-	SpaceChannel        *SpaceSatelliteChannel
-	Dt                  int     // in milliseconds
-	TimeStamp           int     // in milliseconds
-	OrbitalAnomaly      float64 // in radians
-	ForwardingFile      string
-	ForwardingTable     map[int]ForwardingEntry
-	AnomalyCalculations helpers.IAnomalyCalculation
-	ISLInterfaces       []connections.INetworkInterface
+	TotalSimulationTime  int // in milliseconds
+	AnomalyElements      helpers.AnomalyElements
+	Orbit                helpers.IOrbit
+	DistanceSpaceChannel *DistanceSpaceSatelliteChannel
+	SpaceChannel         *SpaceSatelliteChannel
+	Dt                   int     // in milliseconds
+	TimeStamp            int     // in milliseconds
+	OrbitalAnomaly       float64 // in radians
+	ForwardingFile       string
+	ForwardingTable      map[int]ForwardingEntry
+	AnomalyCalculations  helpers.IAnomalyCalculation
+	ISLInterfaces        []connections.INetworkInterface
 }
 
 type ISatellite interface {
@@ -42,6 +43,9 @@ type ISatellite interface {
 	RunDistances()
 	SetForwardingFile(folder string)
 	GetSpaceChannel() *SpaceSatelliteChannel
+	SetSpaceChannel(channel *SpaceSatelliteChannel)
+	GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel
+	SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel)
 	GetName() string
 	GenerateTraffic(traffic []TrafficEntry)
 	getTimeStamp() int
@@ -113,6 +117,18 @@ func (satellite *Satellite) GetSpaceChannel() *SpaceSatelliteChannel {
 	return satellite.SpaceChannel
 }
 
+func (satellite *Satellite) SetSpaceChannel(channel *SpaceSatelliteChannel) {
+	satellite.SpaceChannel = channel
+}
+
+func (satellite *Satellite) GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel {
+	return satellite.DistanceSpaceChannel
+}
+
+func (satellite *Satellite) SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel) {
+	satellite.DistanceSpaceChannel = channel
+}
+
 func (satellite *Satellite) updatePosition() {
 	dt := float64(satellite.Dt) * 0.001 // milliseconds to seconds
 	satellite.OrbitalAnomaly, satellite.AnomalyElements = satellite.AnomalyCalculations.UpdatePosition(satellite.OrbitalAnomaly, dt)
@@ -123,7 +139,7 @@ func (satellite *Satellite) nextTimeStep() {
 }
 
 func (satellite *Satellite) updateSpaceOnDistances() {
-	(*satellite.SpaceChannel) <- UpdateDistancesMessage{
+	(*satellite.DistanceSpaceChannel) <- UpdateDistancesMessage{
 		SatelliteName:    satellite.Name,
 		SatelliteAnomaly: satellite.OrbitalAnomaly,
 		TimeStamp:        satellite.TimeStamp,
@@ -135,14 +151,11 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit, anomalyCalculations helpers.IAnomalyCalculation) ISatellite {
 	var newSatellite Satellite
 
-	spaceChannel := make(SpaceSatelliteChannel)
-
 	newSatellite.Id = id
 	newSatellite.Name = fmt.Sprintf("%s-%d", orbit.GetOrbitId(), id)
 	newSatellite.Dt = dt
 	newSatellite.TotalSimulationTime = totalSimulationTime
 	newSatellite.TimeStamp = 0
-	newSatellite.SpaceChannel = &spaceChannel
 	newSatellite.OrbitalAnomaly = orbitalPhase * (math.Pi / 180.0)
 	newSatellite.AnomalyCalculations = anomalyCalculations
 	newSatellite.Orbit = orbit

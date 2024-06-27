@@ -9,22 +9,22 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/shayunak/SatSimGo/connections"
+	"github.com/shayunak/SatSimGo/helpers"
 )
 
 type Space struct {
-	TotalSimulationTime    int // in seconds
+	ConsellationName    string
+	TimeStep            int
+	TimeStamp           int
+	TotalSimulationTime int // in seconds
+	// Simulation Mode
 	SpaceSatelliteChannels *SpaceSatelliteChannels
-	Events                 EventList
-	ConsellationName       string
-	TimeStep               int
-	TimeStamp              int
-}
-
-type Event struct {
-	TimeStamp         int
-	FirstSatelliteId  string
-	SecondSatelliteId string
-	Distance          float64
+	SatelliteNames         []string
+	// Distances Mode
+	DistancesSpaceSatelliteChannels *DistanceSpaceSatelliteChannels
+	DistanceEntries                 helpers.DistanceEntryList
 }
 
 type UpdateDistancesMessage struct {
@@ -34,66 +34,76 @@ type UpdateDistancesMessage struct {
 	Distances        map[string]float64
 }
 
-type SpaceSatelliteChannel chan UpdateDistancesMessage
+type NewLinkChannelRequest struct {
+	SourceId          string
+	DestId            string
+	DestTypeSatellite bool
+	RecieveChannel    *chan connections.Packet
+	SendChannel       *chan connections.Packet
+}
 
+type DistanceSpaceSatelliteChannel chan UpdateDistancesMessage
+type SpaceSatelliteChannel chan NewLinkChannelRequest
+
+type DistanceSpaceSatelliteChannels []*DistanceSpaceSatelliteChannel
 type SpaceSatelliteChannels []*SpaceSatelliteChannel
 
-type EventList []IEvent
-
 type ISpace interface {
+	// Distances Mode
 	RunDistances(wg *sync.WaitGroup)
-	Run(wg *sync.WaitGroup)
-	SetSatelliteChannels(channels *SpaceSatelliteChannels)
+	GetDistancesSatelliteChannels() *DistanceSpaceSatelliteChannels
+	SetDistancesSatelliteChannels(channels *DistanceSpaceSatelliteChannels)
+	GetDistancesNumberOfSatellites() int
+	addNewDistanceEntries(distancesMessage UpdateDistancesMessage)
+	addNewDistanceEntry(entry *helpers.DistanceEntry)
+	logDistancesSimulationSummary()
+	// Simulation Mode
+	SetSatelliteChannels(channels *SpaceSatelliteChannels, satelliteNames []string)
 	GetNumberOfSatellites() int
 	GetSatelliteChannels() *SpaceSatelliteChannels
+	GetSatelliteNames() []string
+	Run(wg *sync.WaitGroup)
+	// General
 	GetTotalSimulationTime() int
-	addNewEvents(distancesMessage UpdateDistancesMessage)
-	addNewEvent(event *Event)
-	logSimulationSummary()
 }
 
-type IEvent interface {
-	getHeaders() []string
-	toSlice() []string
-	getTimeStamp() int
-}
-
-func (event *Event) getTimeStamp() int {
-	return event.TimeStamp
-}
-
-func (event *Event) getHeaders() []string {
-	/*return []string{"TimeStamp", "FirstSatelliteId", "FirstSatelliteAnomaly", "SecondSatelliteId", "SecondSatelliteAnomaly",
-	"AscensionDiff", "A", "B", "Distance"}*/
-	return []string{"TimeStamp", "FirstSatelliteId", "SecondSatelliteId", "Distance"}
-}
-
-func (event *Event) toSlice() []string {
-	return []string{
-		fmt.Sprintf("%d", event.TimeStamp),
-		event.FirstSatelliteId,
-		event.SecondSatelliteId,
-		fmt.Sprintf("%f", event.Distance),
-	}
-}
-
-func initChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
-	channels := *space.GetSatelliteChannels()
+func initDistancesChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
+	channels := *space.GetDistancesSatelliteChannels()
 	for i, channel := range channels {
 		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
 }
 
-func deleteSatellite(space ISpace, index int) {
-	satellites := *space.GetSatelliteChannels()
+func deleteDistancesSatellite(space ISpace, index int) {
+	satellites := *space.GetDistancesSatelliteChannels()
 	satellites = append(satellites[:index], satellites[index+1:]...)
-	space.SetSatelliteChannels(&satellites)
+	space.SetDistancesSatelliteChannels(&satellites)
 }
 
-func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
+func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
+	for space.GetDistancesNumberOfSatellites() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, space.GetDistancesNumberOfSatellites())
+		initDistancesChannelCases(&selectSatellitesCases, space)
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			deleteDistancesSatellite(space, chosen)
+		}
+		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
+		space.addNewDistanceEntries(distanceUpdateMessage)
+	}
+	space.logDistancesSimulationSummary()
+	wg.Done()
+}
+
+func (space *Space) RunDistances(wg *sync.WaitGroup) {
+	log.Default().Println("Running Distance Analyzer...")
+	go startDistancesSpace(space, wg)
+}
+
+func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessage) {
 	satellites := distancesMessage.Distances
 	for satelliteId, distance := range satellites {
-		space.addNewEvent(&Event{
+		space.addNewDistanceEntry(&helpers.DistanceEntry{
 			TimeStamp:         distancesMessage.TimeStamp,
 			FirstSatelliteId:  distancesMessage.SatelliteName,
 			SecondSatelliteId: satelliteId,
@@ -105,73 +115,25 @@ func (space *Space) addNewEvents(distancesMessage UpdateDistancesMessage) {
 	}
 }
 
-func startSpace(space ISpace, wg *sync.WaitGroup) {
-	channels := space.GetSatelliteChannels()
-	for _, channel := range *channels {
-		close(*channel)
-	}
-	wg.Done()
+func (space *Space) GetDistancesSatelliteChannels() *DistanceSpaceSatelliteChannels {
+	return space.DistancesSpaceSatelliteChannels
 }
 
-func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
-	for space.GetNumberOfSatellites() > 0 {
-		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
-		initChannelCases(&selectSatellitesCases, space)
-		chosen, value, ok := reflect.Select(selectSatellitesCases)
-		if !ok {
-			deleteSatellite(space, chosen)
-		}
-		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
-		space.addNewEvents(distanceUpdateMessage)
-	}
-	space.logSimulationSummary()
-	wg.Done()
+func (space *Space) GetDistancesNumberOfSatellites() int {
+	return len(*space.DistancesSpaceSatelliteChannels)
 }
 
-func (space *Space) RunDistances(wg *sync.WaitGroup) {
-	log.Default().Println("Running Distance Analyzer...")
-	go startDistancesSpace(space, wg)
+func (space *Space) SetDistancesSatelliteChannels(channels *DistanceSpaceSatelliteChannels) {
+	space.DistancesSpaceSatelliteChannels = channels
 }
 
-func (space *Space) Run(wg *sync.WaitGroup) {
-	log.Default().Println("Running space...")
-	go startSpace(space, wg)
+func (space *Space) addNewDistanceEntry(entry *helpers.DistanceEntry) {
+	space.DistanceEntries = append(space.DistanceEntries, entry)
 }
 
-func (space *Space) GetTotalSimulationTime() int {
-	return space.TotalSimulationTime
-}
-
-func (space *Space) SetSatelliteChannels(channels *SpaceSatelliteChannels) {
-	space.SpaceSatelliteChannels = channels
-}
-
-func (space *Space) GetNumberOfSatellites() int {
-	return len(*space.SpaceSatelliteChannels)
-}
-
-func (space *Space) addNewEvent(event *Event) {
-	space.Events = append(space.Events, event)
-}
-
-func (space *Space) GetSatelliteChannels() *SpaceSatelliteChannels {
-	return space.SpaceSatelliteChannels
-}
-
-func getRowsFromEvents(events *EventList) [][]string {
-	var rows [][]string
-	for i, event := range *events {
-		if i == 0 {
-			rows = append(rows, event.getHeaders())
-		}
-		rows = append(rows, event.toSlice())
-	}
-	return rows
-}
-
-func (space *Space) logSimulationSummary() {
-	sort.SliceStable(space.Events, func(i, j int) bool {
-		return space.Events[i].getTimeStamp() < space.Events[j].getTimeStamp()
+func (space *Space) logDistancesSimulationSummary() {
+	sort.SliceStable(space.DistanceEntries, func(i, j int) bool {
+		return space.DistanceEntries[i].GetTimeStamp() < space.DistanceEntries[j].GetTimeStamp()
 	}) // Sorting events by timestamp
 
 	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
@@ -190,7 +152,7 @@ func (space *Space) logSimulationSummary() {
 		log.Fatal(err)
 	}
 
-	rows := getRowsFromEvents(&space.Events)
+	rows := helpers.GetRowsFromEvents(&space.DistanceEntries)
 	csvWriter := csv.NewWriter(outputFile)
 
 	if err := csvWriter.WriteAll(rows); err != nil {
@@ -198,4 +160,64 @@ func (space *Space) logSimulationSummary() {
 	}
 
 	outputFile.Close()
+}
+
+//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
+
+func initChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
+	channels := *space.GetSatelliteChannels()
+	for i, channel := range channels {
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
+}
+
+func deleteSatellite(space ISpace, index int) {
+	satellites := *space.GetSatelliteChannels()
+	names := space.GetSatelliteNames()
+	satellites = append(satellites[:index], satellites[index+1:]...)
+	names = append(names[:index], names[index+1:]...)
+	space.SetSatelliteChannels(&satellites, names)
+}
+
+func (space *Space) startNewLink(linkRequest NewLinkChannelRequest) {
+
+}
+
+func startSpace(space ISpace, wg *sync.WaitGroup) {
+	for space.GetNumberOfSatellites() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
+		initChannelCases(&selectSatellitesCases, space)
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			deleteSatellite(space, chosen)
+		}
+		newLinkRequest := value.Interface().(NewLinkChannelRequest)
+	}
+	wg.Done()
+}
+
+func (space *Space) Run(wg *sync.WaitGroup) {
+	log.Default().Println("Running space...")
+	go startSpace(space, wg)
+}
+
+func (space *Space) GetTotalSimulationTime() int {
+	return space.TotalSimulationTime
+}
+
+func (space *Space) SetSatelliteChannels(channels *SpaceSatelliteChannels, satelliteNames []string) {
+	space.SpaceSatelliteChannels = channels
+	space.SatelliteNames = satelliteNames
+}
+
+func (space *Space) GetNumberOfSatellites() int {
+	return len(*space.SpaceSatelliteChannels)
+}
+
+func (space *Space) GetSatelliteNames() []string {
+	return space.SatelliteNames
+}
+
+func (space *Space) GetSatelliteChannels() *SpaceSatelliteChannels {
+	return space.SpaceSatelliteChannels
 }
