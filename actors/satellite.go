@@ -59,6 +59,7 @@ type ISatellite interface {
 	GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel
 	SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel)
 	GetName() string
+	FindSatellitesInRange() map[string]float64
 	GenerateTraffic(traffic []TrafficEntry, maxPacketSize int)
 	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	RemoveISLConnection(connectedDevice string)
@@ -70,6 +71,7 @@ type ISatellite interface {
 	updateSpaceOnDistances()
 	nextTimeStep()
 	loadForwardingTableInMemory()
+	updateLinks(distances map[string]float64)
 }
 
 func (satellite *Satellite) SetForwardingFile(folder string) {
@@ -78,6 +80,11 @@ func (satellite *Satellite) SetForwardingFile(folder string) {
 
 func (satellite *Satellite) GetName() string {
 	return satellite.Name
+}
+
+func (satellite *Satellite) FindSatellitesInRange() map[string]float64 {
+	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Id, satellite.OrbitalAnomaly,
+		satellite.AnomalyElements, satellite.Orbit.GetOrbitNumber(), float64(satellite.TimeStamp)*0.001)
 }
 
 func (satellite *Satellite) getTimeStamp() int {
@@ -115,6 +122,20 @@ func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChan
 	satellite.ISLInterfaces[interfaceIndex].ChangeLink(connectedDevice, sendChannel, receiveChannel)
 	satellite.AvailableISL--
 	return true
+}
+
+func (satellite *Satellite) updateLinks(distances map[string]float64) {
+	for i := 0; i < len(satellite.ISLInterfaces); i++ {
+		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() != "" {
+			distance, ok := distances[satellite.ISLInterfaces[i].GetDeviceConnectedTo()]
+			// satellite out of range
+			if !ok {
+				satellite.RemoveISLConnection(satellite.ISLInterfaces[i].GetDeviceConnectedTo())
+			} else {
+				satellite.ISLInterfaces[i].GetLink().UpdateLink(distance)
+			}
+		}
+	}
 }
 
 func (satellite *Satellite) generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet {
@@ -230,8 +251,7 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 		SatelliteName:    satellite.Name,
 		SatelliteAnomaly: satellite.OrbitalAnomaly,
 		TimeStamp:        satellite.TimeStamp,
-		Distances: satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Id, satellite.OrbitalAnomaly, satellite.AnomalyElements,
-			satellite.Orbit.GetOrbitNumber(), float64(satellite.TimeStamp)*0.001),
+		Distances:        satellite.FindSatellitesInRange(),
 	}
 }
 
@@ -273,6 +293,10 @@ func startSatelliteDistances(mySatellite ISatellite) {
 func startSatellite(mySatellite ISatellite) {
 	mySatellite.loadForwardingTableInMemory()
 	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
-
+		satellitesInRange := mySatellite.FindSatellitesInRange()
+		mySatellite.updateLinks(satellitesInRange)
+		// Satellite Should process its queue
+		mySatellite.nextTimeStep()
+		mySatellite.updatePosition()
 	}
 }

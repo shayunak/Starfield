@@ -36,8 +36,10 @@ func (networkInterface *NetworkInterface) GetDeviceConnectedTo() string {
 	return networkInterface.DeviceConnectedTo
 }
 
-func (networkInterface *NetworkInterface) ChangeLink(newLink ILink) {
-	networkInterface.Link = newLink
+func (networkInterface *NetworkInterface) ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet) {
+	networkInterface.DeviceConnectedTo = newDeviceConnectedTo
+	networkInterface.SendChannel = newSendChannel
+	networkInterface.ReceiveChannel = newReceiveChannel
 }
 
 func (networkInterface *NetworkInterface) GetLink() ILink {
