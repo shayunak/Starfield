@@ -1,14 +1,14 @@
 package connections
 
 type ILink interface {
-	calculateDeliveryTime(packet Packet) int
-	updateLink(distance float64)
+	CalculateDeliveryTime(packet Packet) int
+	UpdateLink(distance float64)
 }
 
 type NetworkInterface struct {
 	InterfaceId        int
-	SendChannel        chan Packet
-	ReceiveChannel     chan Packet
+	SendChannel        *chan Packet
+	ReceiveChannel     *chan Packet
 	Link               ILink
 	DeviceConnectedTo  string
 	LastPacketSentTime int
@@ -19,16 +19,16 @@ type INetworkInterface interface {
 	Receive() Packet
 	GetDeviceConnectedTo() string
 	GetLink() ILink
-	changeLink(newLink ILink)
+	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
 }
 
 func (networkInterface *NetworkInterface) Send(packet Packet) {
-	networkInterface.SendChannel <- packet
+	*networkInterface.SendChannel <- packet
 }
 
 func (networkInterface *NetworkInterface) Receive() Packet {
-	packet := <-networkInterface.ReceiveChannel
-	packet.PacketDeliveryTime = packet.PacketDeliveryTime + networkInterface.Link.calculateDeliveryTime(packet)
+	packet := <-*networkInterface.ReceiveChannel
+	packet.PacketSentTime = packet.PacketSentTime + networkInterface.Link.CalculateDeliveryTime(packet)
 	return packet
 }
 

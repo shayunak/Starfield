@@ -19,6 +19,7 @@
         "number of GSLs": 3,
         "isl_bandwidth": 1000000.0,
         "isl_link_noise_coef": 1500.0,
-        "isl_acquisition_time": 12.0
+        "isl_acquisition_time": 12.0,
+        "max_packet_size": 50
     }
 }

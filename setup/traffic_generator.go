@@ -40,10 +40,10 @@ func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficE
 	return trafficMatrix
 }
 
-func loadTrafficOnNodes(generatorFile string, satellites *SatelliteList) {
+func loadTrafficOnNodes(generatorFile string, satellites *SatelliteList, maxPacketSize int) {
 	trafficMatrix := readTrafficGeneratorFile(generatorFile)
 
 	for _, satellite := range *satellites {
-		satellite.GenerateTraffic(trafficMatrix[satellite.GetName()])
+		satellite.GenerateTraffic(trafficMatrix[satellite.GetName()], maxPacketSize)
 	}
 }

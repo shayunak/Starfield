@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -34,7 +35,7 @@ type UpdateDistancesMessage struct {
 	Distances        map[string]float64
 }
 
-type NewLinkChannelRequest struct {
+type LinkChannelRequest struct {
 	SourceId          string
 	DestId            string
 	DestTypeSatellite bool
@@ -43,7 +44,7 @@ type NewLinkChannelRequest struct {
 }
 
 type DistanceSpaceSatelliteChannel chan UpdateDistancesMessage
-type SpaceSatelliteChannel chan NewLinkChannelRequest
+type SpaceSatelliteChannel chan LinkChannelRequest
 
 type DistanceSpaceSatelliteChannels []*DistanceSpaceSatelliteChannel
 type SpaceSatelliteChannels []*SpaceSatelliteChannel
@@ -62,6 +63,7 @@ type ISpace interface {
 	GetNumberOfSatellites() int
 	GetSatelliteChannels() *SpaceSatelliteChannels
 	GetSatelliteNames() []string
+	startNewLink(linkRequest LinkChannelRequest, sourceIndex int)
 	Run(wg *sync.WaitGroup)
 	// General
 	GetTotalSimulationTime() int
@@ -179,19 +181,28 @@ func deleteSatellite(space ISpace, index int) {
 	space.SetSatelliteChannels(&satellites, names)
 }
 
-func (space *Space) startNewLink(linkRequest NewLinkChannelRequest) {
-
+func (space *Space) startNewLink(linkRequest LinkChannelRequest, sourceIndex int) {
+	satelliteNames := space.GetSatelliteNames()
+	satellites := *space.GetSatelliteChannels()
+	destIndex := slices.IndexFunc(satelliteNames, func(name string) bool { return name == linkRequest.DestId })
+	if destIndex == -1 {
+		log.Default().Println("Unknown destination: ", linkRequest.DestId)
+		*satellites[sourceIndex] <- linkRequest
+	} else {
+		*satellites[destIndex] <- linkRequest
+	}
 }
 
 func startSpace(space ISpace, wg *sync.WaitGroup) {
 	for space.GetNumberOfSatellites() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
 		initChannelCases(&selectSatellitesCases, space)
-		//chosen, value, ok := reflect.Select(selectSatellitesCases)
-		//if !ok {
-		//	deleteSatellite(space, chosen)
-		//}
-		//newLinkRequest := value.Interface().(NewLinkChannelRequest)
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			deleteSatellite(space, chosen)
+		}
+		newLinkRequest := value.Interface().(LinkChannelRequest)
+		space.startNewLink(newLinkRequest, chosen)
 	}
 	wg.Done()
 }

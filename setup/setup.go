@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/shayunak/SatSimGo/actors"
+	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
@@ -59,7 +60,9 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int, tota
 		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
 			anomaly := phase_shift + float64(satellite)*anomalyStep
 
-			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds, orbit, anomalyCalc))
+			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds,
+				orbit, anomalyCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.NumberOfGSLs, config.SatelliteConfig.SpeedOfLightVac,
+				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime))
 
 		}
 	}
@@ -75,6 +78,14 @@ func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulatio
 		ConsellationName:                config.ConsellationName,
 		TimeStep:                        timeStep,
 		TimeStamp:                       0,
+	}
+}
+
+func initTopology(satellites SatelliteList, entries map[string]map[string]connections.InterfaceEntry) {
+	for _, satellite := range satellites {
+		for _, entry := range entries[satellite.GetName()] {
+			satellite.AddISLConnection(entry.ConnectedDevice, entry.ReceiveChannel, entry.SendChannel)
+		}
 	}
 }
 
@@ -97,6 +108,7 @@ func startSatellites(satellites SatelliteList) (*actors.SpaceSatelliteChannels, 
 		channels = append(channels, &channel)
 		satelliteNames = append(satelliteNames, satellite.GetName())
 		satellite.SetSpaceChannel(&channel)
+		satellite.Run()
 	}
 	return &channels, satelliteNames
 }
@@ -130,12 +142,19 @@ func SetupForwardingSimulation(configFileName string, trafficFile string, forwar
 	initSatellites(&satellites, config, timeStep, totalSimulationTime)
 
 	// reading the traffic file
-	loadTrafficOnNodes(trafficFile, &satellites)
+	loadTrafficOnNodes(trafficFile, &satellites, config.SatelliteConfig.MaxPacketSize)
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {
 		satellite.SetForwardingFile(forwardingFolder)
 	}
+
+	// bringing up the ISL topology
+	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
+	topologyList := connections.GetTopologyList(topologyPairs)
+
+	// adding topology data to satellites
+	initTopology(satellites, topologyList)
 
 	// starting the actors
 	space.SetSatelliteChannels(startSatellites(satellites))

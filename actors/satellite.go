@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"container/heap"
 	"encoding/csv"
 	"fmt"
 	"log"
@@ -15,27 +16,38 @@ import (
 type TrafficEntry struct {
 	Destination string
 	TimeStamp   int // in milliseconds
-	Length      int // in bits
+	Length      int // in Mb
 }
 
 type ForwardingEntry map[string]string
 
 type Satellite struct {
-	Name string
-	Id   int
+	// General
+	Name                string
+	Id                  int
+	Dt                  int // in milliseconds
+	TimeStamp           int // in milliseconds
+	TotalSimulationTime int // in milliseconds
+
+	// Geometrical parameters
 	// Position            helpers.CartesianCoordinates (Unnecessary for satellite distances calculations)
-	TotalSimulationTime  int // in milliseconds
-	AnomalyElements      helpers.AnomalyElements
-	Orbit                helpers.IOrbit
+	AnomalyElements     helpers.AnomalyElements
+	Orbit               helpers.IOrbit
+	OrbitalAnomaly      float64 // in radians
+	AnomalyCalculations helpers.IAnomalyCalculation
+
+	// Packet Level Simulation
+	ForwardingFile  string
+	ForwardingTable map[int]ForwardingEntry
+	EventQueue      helpers.PriorityQueue
+
+	// Goroutines and connections, and channels
+	ISLInterfaces        []connections.INetworkInterface
+	GSLInterfaces        []connections.INetworkInterface
+	AvailableISL         int
+	AvailableGSL         int
 	DistanceSpaceChannel *DistanceSpaceSatelliteChannel
 	SpaceChannel         *SpaceSatelliteChannel
-	Dt                   int     // in milliseconds
-	TimeStamp            int     // in milliseconds
-	OrbitalAnomaly       float64 // in radians
-	ForwardingFile       string
-	ForwardingTable      map[int]ForwardingEntry
-	AnomalyCalculations  helpers.IAnomalyCalculation
-	ISLInterfaces        []connections.INetworkInterface
 }
 
 type ISatellite interface {
@@ -47,7 +59,11 @@ type ISatellite interface {
 	GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel
 	SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel)
 	GetName() string
-	GenerateTraffic(traffic []TrafficEntry)
+	GenerateTraffic(traffic []TrafficEntry, maxPacketSize int)
+	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
+	RemoveISLConnection(connectedDevice string)
+	findAvailableISLInterfaceId() int
+	generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet
 	getTimeStamp() int
 	getTotalSimulationTime() int
 	updatePosition()
@@ -72,8 +88,79 @@ func (satellite *Satellite) getTotalSimulationTime() int {
 	return satellite.TotalSimulationTime
 }
 
-func (satellite *Satellite) GenerateTraffic(traffic []TrafficEntry) {
+func (satellite *Satellite) findAvailableISLInterfaceId() int {
+	for i := 0; i < len(satellite.ISLInterfaces); i++ {
+		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() == "" {
+			return i
+		}
+	}
+	return -1
+}
 
+func (satellite *Satellite) RemoveISLConnection(connectedDevice string) {
+	for i := 0; i < len(satellite.ISLInterfaces); i++ {
+		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() == connectedDevice {
+			satellite.ISLInterfaces[i].ChangeLink("", nil, nil)
+			satellite.AvailableISL++
+			return
+		}
+	}
+}
+
+func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool {
+	if satellite.AvailableISL <= 0 {
+		return false
+	}
+	interfaceIndex := satellite.findAvailableISLInterfaceId()
+	satellite.ISLInterfaces[interfaceIndex].ChangeLink(connectedDevice, sendChannel, receiveChannel)
+	satellite.AvailableISL--
+	return true
+}
+
+func (satellite *Satellite) generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet {
+	numberOfFullPackets := int(entry.Length / maxPacketSize)
+	sizeOfLastPacket := entry.Length % maxPacketSize
+	packets := make([]connections.Packet, numberOfFullPackets)
+
+	for i := 0; i < numberOfFullPackets; i++ {
+		packets[i] = connections.Packet{
+			Source:         satellite.Name,
+			Destination:    entry.Destination,
+			Length:         maxPacketSize,
+			PacketSentTime: entry.TimeStamp,
+		}
+	}
+	if sizeOfLastPacket > 0 {
+		packets = append(packets, connections.Packet{
+			Source:         satellite.Name,
+			Destination:    entry.Destination,
+			Length:         sizeOfLastPacket,
+			PacketSentTime: entry.TimeStamp,
+		})
+	}
+	return packets
+}
+
+func (satellite *Satellite) GenerateTraffic(traffic []TrafficEntry, maxPacketSize int) {
+	satellite.EventQueue = make(helpers.PriorityQueue, 0)
+
+	for _, entry := range traffic {
+		packets := satellite.generatePackets(maxPacketSize, entry)
+		for index, packet := range packets {
+			item := helpers.Item{
+				Value: helpers.Event{
+					TimeStamp: entry.TimeStamp,
+					Type:      helpers.SEND_EVENT,
+					Data:      &packet,
+				},
+				Rank:  entry.TimeStamp,
+				Index: index,
+			}
+			satellite.EventQueue = append(satellite.EventQueue, &item)
+		}
+	}
+
+	heap.Init(&satellite.EventQueue)
 }
 
 func (satellite *Satellite) RunDistances() {
@@ -148,7 +235,9 @@ func (satellite *Satellite) updateSpaceOnDistances() {
 	}
 }
 
-func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit, anomalyCalculations helpers.IAnomalyCalculation) ISatellite {
+func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit,
+	anomalyCalculations helpers.IAnomalyCalculation, numberOfIsls int, numberOfGsls int, speedOfLightVac float64,
+	bandwidth float64, linkNoiseCoefficient float64, acquisitionTime float64) ISatellite {
 	var newSatellite Satellite
 
 	newSatellite.Id = id
@@ -156,6 +245,7 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 	newSatellite.Dt = dt
 	newSatellite.TotalSimulationTime = totalSimulationTime
 	newSatellite.TimeStamp = 0
+	// Geo
 	newSatellite.OrbitalAnomaly = orbitalPhase * (math.Pi / 180.0)
 	newSatellite.AnomalyCalculations = anomalyCalculations
 	newSatellite.Orbit = orbit
@@ -163,6 +253,10 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 		AnomalySinus:   math.Sin(newSatellite.OrbitalAnomaly),
 		AnomalyCosinus: math.Cos(newSatellite.OrbitalAnomaly),
 	}
+	// Channels
+	newSatellite.AvailableISL = numberOfIsls
+	newSatellite.AvailableGSL = numberOfGsls
+	newSatellite.ISLInterfaces = connections.InitISLs(numberOfIsls, speedOfLightVac, bandwidth, linkNoiseCoefficient)
 
 	return &newSatellite
 }
