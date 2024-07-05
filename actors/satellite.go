@@ -11,6 +11,7 @@ import (
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
+	"github.com/shayunak/SatSimGo/routing"
 )
 
 type TrafficEntry struct {
@@ -62,7 +63,8 @@ type ISatellite interface {
 	FindSatellitesInRange() map[string]float64
 	GenerateTraffic(traffic []TrafficEntry, maxPacketSize int)
 	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
-	RemoveISLConnection(connectedDevice string)
+	ReceiveFromInterfaces()
+	SendPackets()
 	findAvailableISLInterfaceId() int
 	generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet
 	getTimeStamp() int
@@ -104,16 +106,6 @@ func (satellite *Satellite) findAvailableISLInterfaceId() int {
 	return -1
 }
 
-func (satellite *Satellite) RemoveISLConnection(connectedDevice string) {
-	for i := 0; i < len(satellite.ISLInterfaces); i++ {
-		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() == connectedDevice {
-			satellite.ISLInterfaces[i].ChangeLink("", nil, nil)
-			satellite.AvailableISL++
-			return
-		}
-	}
-}
-
 func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool {
 	if satellite.AvailableISL <= 0 {
 		return false
@@ -130,7 +122,8 @@ func (satellite *Satellite) updateLinks(distances map[string]float64) {
 			distance, ok := distances[satellite.ISLInterfaces[i].GetDeviceConnectedTo()]
 			// satellite out of range
 			if !ok {
-				satellite.RemoveISLConnection(satellite.ISLInterfaces[i].GetDeviceConnectedTo())
+				satellite.ISLInterfaces[i].CloseConnection()
+				satellite.AvailableISL++
 			} else {
 				satellite.ISLInterfaces[i].GetLink().UpdateLink(distance)
 			}
@@ -163,17 +156,16 @@ func (satellite *Satellite) generatePackets(maxPacketSize int, entry TrafficEntr
 }
 
 func (satellite *Satellite) GenerateTraffic(traffic []TrafficEntry, maxPacketSize int) {
-	satellite.EventQueue = make(helpers.PriorityQueue, 0)
-
 	for _, entry := range traffic {
 		packets := satellite.generatePackets(maxPacketSize, entry)
 		for index, packet := range packets {
+			event := connections.Event{
+				TimeStamp: entry.TimeStamp,
+				Type:      connections.SEND_EVENT,
+				Data:      &packet,
+			}
 			item := helpers.Item{
-				Value: helpers.Event{
-					TimeStamp: entry.TimeStamp,
-					Type:      helpers.SEND_EVENT,
-					Data:      &packet,
-				},
+				Value: &event,
 				Rank:  entry.TimeStamp,
 				Index: index,
 			}
@@ -274,6 +266,7 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 		AnomalyCosinus: math.Cos(newSatellite.OrbitalAnomaly),
 	}
 	// Channels
+	newSatellite.EventQueue = make(helpers.PriorityQueue, 0)
 	newSatellite.AvailableISL = numberOfIsls
 	newSatellite.AvailableGSL = numberOfGsls
 	newSatellite.ISLInterfaces = connections.InitISLs(numberOfIsls, speedOfLightVac, bandwidth, linkNoiseCoefficient)
@@ -295,8 +288,35 @@ func startSatellite(mySatellite ISatellite) {
 	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
 		satellitesInRange := mySatellite.FindSatellitesInRange()
 		mySatellite.updateLinks(satellitesInRange)
-		// Satellite Should process its queue
+		mySatellite.ReceiveFromInterfaces()
+		mySatellite.SendPackets()
 		mySatellite.nextTimeStep()
 		mySatellite.updatePosition()
+	}
+}
+
+func (satellite *Satellite) ReceiveFromInterfaces() {
+	for _, inteface := range satellite.ISLInterfaces {
+		if inteface.GetDeviceConnectedTo() != "" {
+			receivedEvents := inteface.Receive(satellite.getTimeStamp())
+			for _, event := range receivedEvents {
+				heap.Push(&satellite.EventQueue, event)
+			}
+		}
+	}
+}
+
+func (satellite *Satellite) SendPackets() {
+	lastTimeStampSent := 0
+	for lastTimeStampSent <= satellite.getTimeStamp() && !satellite.EventQueue.IsEmpty() {
+		itemPopped := heap.Pop(&satellite.EventQueue).(*helpers.Item)
+		lastTimeStampSent = itemPopped.Value.TimeStamp
+		eventType := itemPopped.Value.Type
+		if eventType == connections.SEND_EVENT {
+			packet := itemPopped.Value.Data
+			forwardingChoice := satellite.ForwardingTable[satellite.TimeStamp][packet.Destination]
+			interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, packet.Source)
+		}
+
 	}
 }

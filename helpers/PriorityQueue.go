@@ -6,17 +6,8 @@ import (
 	"github.com/shayunak/SatSimGo/connections"
 )
 
-const SEND_EVENT int = 0
-const RECEIVE_EVENT int = 1
-
-type Event struct {
-	TimeStamp int
-	Type      int
-	Data      *connections.Packet
-}
-
 type Item struct {
-	Value Event
+	Value *connections.Event
 	Rank  int
 	Index int
 }
@@ -25,6 +16,8 @@ type Item struct {
 type PriorityQueue []*Item
 
 func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) IsEmpty() bool { return len(pq) == 0 }
 
 func (pq PriorityQueue) Less(i, j int) bool {
 	return pq[i].Rank < pq[j].Rank
@@ -54,7 +47,7 @@ func (pq *PriorityQueue) Pop() any {
 }
 
 // update modifies the priority and value of an Item in the queue.
-func (pq *PriorityQueue) update(item *Item, event Event, rank int) {
+func (pq *PriorityQueue) update(item *Item, event *connections.Event, rank int) {
 	item.Value = event
 	item.Rank = rank
 	heap.Fix(pq, item.Index)

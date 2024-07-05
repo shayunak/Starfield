@@ -25,11 +25,12 @@ type SatelliteConfig struct {
 	ConeRadius          float64 `json:"cone_radius"`             // in meters
 	NumberOfISLs        int     `json:"number_of_isls"`
 	NumberOfGSLs        int     `json:"number of GSLs"`
-	ISLBandwidth        float64 `json:"isl_bandwidth"`        // in Mbps
-	ISLLinkNoiseCoef    float64 `json:"isl_link_noise_coef"`  // in km^2
-	ISLAcquisitionTime  float64 `json:"isl_acquisition_time"` // in seconds
-	SpeedOfLightVac     float64 `json:"speed_of_light_vac"`   // in meters per second
-	MaxPacketSize       int     `json:"max_packet_size"`      // in Mb
+	ISLBandwidth        float64 `json:"isl_bandwidth"`         // in Mbps
+	ISLLinkNoiseCoef    float64 `json:"isl_link_noise_coef"`   // in km^2
+	ISLAcquisitionTime  float64 `json:"isl_acquisition_time"`  // in seconds
+	SpeedOfLightVac     float64 `json:"speed_of_light_vac"`    // in meters per second
+	MaxPacketSize       int     `json:"max_packet_size"`       // in Mb
+	InterfaceBufferSize int     `json:"interface_buffer_size"` // number of Packets
 }
 
 type Config struct {

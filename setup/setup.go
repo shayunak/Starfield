@@ -151,7 +151,7 @@ func SetupForwardingSimulation(configFileName string, trafficFile string, forwar
 
 	// bringing up the ISL topology
 	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
-	topologyList := connections.GetTopologyList(topologyPairs)
+	topologyList := connections.GetTopologyList(topologyPairs, config.SatelliteConfig.InterfaceBufferSize)
 
 	// adding topology data to satellites
 	initTopology(satellites, topologyList)
