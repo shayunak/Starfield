@@ -21,9 +21,24 @@ type OrbitCalc struct {
 }
 
 type IOrbitalCalculations interface {
+	GetInclinationSinus() float64
+	GetInclinationCosinus() float64
+	GetAscensionStep() float64
 	FindOrbitsInRange(currentAnomaly float64, anomalyEl AnomalyElements, orbit_id int) map[int]OrbitCalc
 	isOrbitValid(orbitId int) bool
 	getRealOrbitId(id int, orbitId int) (int, float64)
+}
+
+func (orbitalCalc *OrbitalCalculations) GetInclinationSinus() float64 {
+	return orbitalCalc.InclinationSinus
+}
+
+func (orbitalCalc *OrbitalCalculations) GetInclinationCosinus() float64 {
+	return orbitalCalc.InclinationCosinus
+}
+
+func (orbitalCalc *OrbitalCalculations) GetAscensionStep() float64 {
+	return orbitalCalc.AscensionStep
 }
 
 func calculateLimits(lengthLimitRatio float64, inclinationSinus float64, inclinationCosinus float64,

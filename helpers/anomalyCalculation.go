@@ -21,8 +21,10 @@ type AnomalyElements struct {
 type IAnomalyCalculation interface {
 	FindSatellitesInRange(id int, currentAnomaly float64, anomalyEl AnomalyElements, orbitId int, timeStamp float64) map[string]float64
 	UpdatePosition(prevAnomaly float64, timeStep float64) (float64, AnomalyElements)
+	CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int, secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64
 	calculateSatelliteIdInRange(currentAnomaly float64, orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]float64
 	calculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64
+	calculatePhase(satelliteId int, orbitId int) float64
 }
 
 type AnomalyCalculations struct {
@@ -119,4 +121,37 @@ func (anomalyCalc *AnomalyCalculations) UpdatePosition(prevAnomaly float64, time
 		AnomalyCosinus: math.Cos(newOrbitalAnomaly),
 	}
 	return newOrbitalAnomaly, newAnomalyElements
+}
+
+func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId int) float64 {
+
+	phase := float64(satelliteId) * anomalyCalc.AnomalyStep
+	if anomalyCalc.PhaseDiffEnabled && orbitId%2 == 1 {
+		phase += anomalyCalc.AnomalyStep / 2.0
+	}
+
+	return phase
+}
+
+// Timestamp shpuld be in seconds
+func (anomalyCalc *AnomalyCalculations) CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int,
+	secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64 {
+
+	firstPhase := anomalyCalc.calculatePhase(firstSatelliteId, firstSatelliteOrbitId)
+	secondPhase := anomalyCalc.calculatePhase(secondSatelliteId, secondSatelliteOrbitId)
+	phaseDiff := firstPhase - secondPhase
+	ascensionDiff := float64(firstSatelliteOrbitId-secondSatelliteOrbitId) * anomalyCalc.OrbitalCalculations.GetAscensionStep()
+	ascensionDiffSinus := math.Sin(ascensionDiff)
+	ascensionDiffCosinus := math.Cos(ascensionDiff)
+	phaseDiffSinus := math.Sin(phaseDiff)
+	phaseDiffCosinus := math.Cos(phaseDiff)
+	inclinationSinus := anomalyCalc.OrbitalCalculations.GetInclinationSinus()
+	inclinationCosinus := anomalyCalc.OrbitalCalculations.GetInclinationCosinus()
+	timeTermCosinus := math.Cos(2.0*anomalyCalc.MeanMotion*timeStamp + firstPhase + secondPhase)
+
+	phaseDiffSinusTerm := 2.0 * inclinationCosinus * ascensionDiffSinus * phaseDiffSinus
+	phaseDiffCosinusTerm := ((1+math.Pow(inclinationCosinus, 2.0))*ascensionDiffCosinus + math.Pow(inclinationSinus, 2.0)) * phaseDiffCosinus
+	timeTerm := (1 - ascensionDiffCosinus) * math.Pow(inclinationSinus, 2.0) * timeTermCosinus
+
+	return anomalyCalc.Radius * math.Sqrt(2.0+phaseDiffSinusTerm-phaseDiffCosinusTerm+timeTerm)
 }

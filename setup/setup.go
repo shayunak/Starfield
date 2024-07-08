@@ -84,7 +84,7 @@ func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulatio
 func initTopology(satellites SatelliteList, entries map[string]map[string]connections.InterfaceEntry) {
 	for _, satellite := range satellites {
 		for _, entry := range entries[satellite.GetName()] {
-			satellite.AddISLConnection(entry.ConnectedDevice, entry.ReceiveChannel, entry.SendChannel)
+			satellite.AddISLConnectionOnId(entry.InterfaceId, entry.ConnectedDevice, entry.ReceiveChannel, entry.SendChannel)
 		}
 	}
 }

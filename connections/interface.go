@@ -1,18 +1,20 @@
 package connections
 
 type Pair struct {
+	Id              int    // pair id
 	FirstSatellite  string // sending satellite
 	SecondSatellite string // receiving satellite
 }
 
 type InterfaceEntry struct {
+	InterfaceId     int
 	ConnectedDevice string
 	SendChannel     *chan Packet
 	ReceiveChannel  *chan Packet
 }
 
 type Event struct {
-	TimeStamp int
+	TimeStamp float64
 	Type      int
 	Data      *Packet
 }
@@ -26,12 +28,12 @@ type NetworkInterface struct {
 	ReceiveChannel     *chan Packet
 	Link               ILink
 	DeviceConnectedTo  string
-	LastPacketSentTime int
+	LastPacketSentTime float64
 }
 
 type INetworkInterface interface {
-	Send(packet Packet)
-	Receive(maxTimeStamp int) []Event
+	Send(packet Packet, timeOfEvent float64)
+	Receive(maxTimeStamp float64) []Event
 	GetDeviceConnectedTo() string
 	GetLink() ILink
 	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
@@ -39,12 +41,21 @@ type INetworkInterface interface {
 }
 
 type ILink interface {
-	CalculateDeliveryTime(packet Packet) int
+	CalculateDeliveryTime(packet Packet) float64
+	CalculateTransmissionTime(packet Packet) float64
 	UpdateLink(distance float64)
 }
 
-func (networkInterface *NetworkInterface) Send(packet Packet) {
-	*networkInterface.SendChannel <- packet
+func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) {
+	networkInterface.LastPacketSentTime = max(timeOfEvent, networkInterface.LastPacketSentTime)
+	packet.PacketSentTime = networkInterface.LastPacketSentTime
+	transmissionTime := networkInterface.Link.CalculateTransmissionTime(packet)
+	select {
+	case *networkInterface.SendChannel <- packet:
+		networkInterface.LastPacketSentTime += transmissionTime
+	default:
+		networkInterface.LastPacketSentTime += transmissionTime
+	}
 }
 
 func (networkInterface *NetworkInterface) CloseConnection() {
@@ -54,9 +65,9 @@ func (networkInterface *NetworkInterface) CloseConnection() {
 	networkInterface.ReceiveChannel = nil
 }
 
-func (networkInterface *NetworkInterface) Receive(maxTimeStamp int) []Event {
+func (networkInterface *NetworkInterface) Receive(maxTimeStamp float64) []Event {
 	recievedEvents := make([]Event, 0)
-	lastTimeStampRead := 0
+	lastTimeStampRead := 0.0
 	channelEmpty := false
 	for lastTimeStampRead <= maxTimeStamp && !channelEmpty {
 		select {
@@ -106,6 +117,7 @@ func GetTopologyList(pairs []Pair, interfaceBufferSize int) map[string]map[strin
 			if topologyList[pair.SecondSatellite] == nil {
 				channel := make(chan Packet, interfaceBufferSize)
 				topologyList[pair.FirstSatellite][pair.SecondSatellite] = InterfaceEntry{
+					InterfaceId:     pair.Id,
 					ConnectedDevice: pair.SecondSatellite,
 					SendChannel:     &channel,
 					ReceiveChannel:  nil,
@@ -119,6 +131,7 @@ func GetTopologyList(pairs []Pair, interfaceBufferSize int) map[string]map[strin
 		entry := topologyList[pair.SecondSatellite][pair.FirstSatellite]
 		channel := topologyList[pair.FirstSatellite][pair.SecondSatellite].SendChannel
 		topologyList[pair.SecondSatellite][pair.FirstSatellite] = InterfaceEntry{
+			InterfaceId:     entry.InterfaceId,
 			ConnectedDevice: entry.ConnectedDevice,
 			SendChannel:     entry.SendChannel,
 			ReceiveChannel:  channel,

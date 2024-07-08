@@ -16,18 +16,22 @@ func GenerateGridPlus(numberOfOrbits int, numberOfSatellitesPerOrbit int, consel
 			nextIdInOrbit := (satellite + 1) % numberOfSatellitesPerOrbit
 			previousIdInOrbit := (satellite + numberOfSatellitesPerOrbit - 1) % numberOfSatellitesPerOrbit
 			gridPlus[orbit*numberOfSatellitesPerOrbit+satellite] = Pair{
+				Id:              0,
 				FirstSatellite:  fmt.Sprintf("%s-%d-%d", consellationName, orbit, satellite),
 				SecondSatellite: fmt.Sprintf("%s-%d-%d", consellationName, orbit, nextIdInOrbit),
 			}
 			gridPlus[orbit*numberOfSatellitesPerOrbit+satellite+1] = Pair{
+				Id:              1,
 				FirstSatellite:  fmt.Sprintf("%s-%d-%d", consellationName, orbit, satellite),
 				SecondSatellite: fmt.Sprintf("%s-%d-%d", consellationName, orbit, previousIdInOrbit),
 			}
 			gridPlus[orbit*numberOfSatellitesPerOrbit+satellite+2] = Pair{
+				Id:              2,
 				FirstSatellite:  fmt.Sprintf("%s-%d-%d", consellationName, orbit, satellite),
 				SecondSatellite: fmt.Sprintf("%s-%d-%d", consellationName, orbitOnLeft, satellite),
 			}
 			gridPlus[orbit*numberOfSatellitesPerOrbit+satellite+3] = Pair{
+				Id:              3,
 				FirstSatellite:  fmt.Sprintf("%s-%d-%d", consellationName, orbit, satellite),
 				SecondSatellite: fmt.Sprintf("%s-%d-%d", consellationName, orbitOnRight, satellite),
 			}

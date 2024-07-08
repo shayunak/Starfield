@@ -63,12 +63,14 @@ type ISatellite interface {
 	FindSatellitesInRange() map[string]float64
 	GenerateTraffic(traffic []TrafficEntry, maxPacketSize int)
 	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
+	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	ReceiveFromInterfaces()
 	SendPackets()
 	findAvailableISLInterfaceId() int
 	generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet
 	getTimeStamp() int
 	getTotalSimulationTime() int
+	getISLInterfaceNames() []string
 	updatePosition()
 	updateSpaceOnDistances()
 	nextTimeStep()
@@ -97,6 +99,15 @@ func (satellite *Satellite) getTotalSimulationTime() int {
 	return satellite.TotalSimulationTime
 }
 
+func (satellite *Satellite) getISLInterfaceNames() []string {
+	satelliteNames := make([]string, len(satellite.ISLInterfaces))
+
+	for i := 0; i < len(satellite.ISLInterfaces); i++ {
+		satelliteNames[i] = satellite.ISLInterfaces[i].GetDeviceConnectedTo()
+	}
+	return satelliteNames
+}
+
 func (satellite *Satellite) findAvailableISLInterfaceId() int {
 	for i := 0; i < len(satellite.ISLInterfaces); i++ {
 		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() == "" {
@@ -104,6 +115,16 @@ func (satellite *Satellite) findAvailableISLInterfaceId() int {
 		}
 	}
 	return -1
+}
+
+func (satellite *Satellite) AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet,
+	sendChannel *chan connections.Packet) bool {
+	if satellite.AvailableISL <= 0 {
+		return false
+	}
+	satellite.ISLInterfaces[id].ChangeLink(connectedDevice, sendChannel, receiveChannel)
+	satellite.AvailableISL--
+	return true
 }
 
 func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool {
@@ -141,7 +162,7 @@ func (satellite *Satellite) generatePackets(maxPacketSize int, entry TrafficEntr
 			Source:         satellite.Name,
 			Destination:    entry.Destination,
 			Length:         maxPacketSize,
-			PacketSentTime: entry.TimeStamp,
+			PacketSentTime: float64(entry.TimeStamp),
 		}
 	}
 	if sizeOfLastPacket > 0 {
@@ -149,7 +170,7 @@ func (satellite *Satellite) generatePackets(maxPacketSize int, entry TrafficEntr
 			Source:         satellite.Name,
 			Destination:    entry.Destination,
 			Length:         sizeOfLastPacket,
-			PacketSentTime: entry.TimeStamp,
+			PacketSentTime: float64(entry.TimeStamp),
 		})
 	}
 	return packets
@@ -160,7 +181,7 @@ func (satellite *Satellite) GenerateTraffic(traffic []TrafficEntry, maxPacketSiz
 		packets := satellite.generatePackets(maxPacketSize, entry)
 		for index, packet := range packets {
 			event := connections.Event{
-				TimeStamp: entry.TimeStamp,
+				TimeStamp: float64(entry.TimeStamp),
 				Type:      connections.SEND_EVENT,
 				Data:      &packet,
 			}
@@ -298,7 +319,7 @@ func startSatellite(mySatellite ISatellite) {
 func (satellite *Satellite) ReceiveFromInterfaces() {
 	for _, inteface := range satellite.ISLInterfaces {
 		if inteface.GetDeviceConnectedTo() != "" {
-			receivedEvents := inteface.Receive(satellite.getTimeStamp())
+			receivedEvents := inteface.Receive(float64(satellite.getTimeStamp()))
 			for _, event := range receivedEvents {
 				heap.Push(&satellite.EventQueue, event)
 			}
@@ -307,16 +328,20 @@ func (satellite *Satellite) ReceiveFromInterfaces() {
 }
 
 func (satellite *Satellite) SendPackets() {
-	lastTimeStampSent := 0
-	for lastTimeStampSent <= satellite.getTimeStamp() && !satellite.EventQueue.IsEmpty() {
+	lastTimeStampSent := 0.0
+	for lastTimeStampSent <= float64(satellite.getTimeStamp()) && !satellite.EventQueue.IsEmpty() {
 		itemPopped := heap.Pop(&satellite.EventQueue).(*helpers.Item)
 		lastTimeStampSent = itemPopped.Value.TimeStamp
 		eventType := itemPopped.Value.Type
 		if eventType == connections.SEND_EVENT {
-			packet := itemPopped.Value.Data
+			packet := *itemPopped.Value.Data
 			forwardingChoice := satellite.ForwardingTable[satellite.TimeStamp][packet.Destination]
-			interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, packet.Source)
+			interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, satellite.getTimeStamp(), satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
+			if interfaceId != -1 {
+				satellite.ISLInterfaces[interfaceId].Send(packet, lastTimeStampSent)
+			} else {
+				heap.Push(&satellite.EventQueue, itemPopped)
+			}
 		}
-
 	}
 }
