@@ -52,21 +52,32 @@ func forwardingSettingsRun(consellationFile string, trafficFile string, forwardi
 	simulationDone.Wait() // waiting for the simulation to finish
 }
 
+func printHelp() {
+	fmt.Println("main.go --help")
+	fmt.Println("main.go --distances [consellation config file] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --forwarding [consellation config file] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
+}
+
 func main() {
 	args := os.Args
-	if len(args) == 2 && args[1] == "--help" {
-		fmt.Println("main.go --help")
-		fmt.Println("main.go --distances [consellation config file] [time step (ms)] [total simulation time (s)]")
-		fmt.Println("main.go --forwarding [consellation config file] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
+
+	if len(args) < 2 {
+		fmt.Println("No Option Provided!")
+		printHelp()
 		os.Exit(1)
-	} else if len(args) == 5 && args[1] == "--distances" {
+	}
+
+	if args[1] == "--help" && len(args) == 2 {
+		printHelp()
+	} else if args[1] == "--distances" && len(args) == 5 {
 		calculateDistancesSettingsRun(args[2], args[3], args[4])
 		log.Default().Println("Distances Generated...")
-	} else if len(args) == 7 && args[1] == "--forwarding" {
+	} else if args[1] == "--forwarding" && len(args) == 7 {
 		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6])
 		log.Default().Println("Simulation Done...")
 	} else {
-		fmt.Println("Invalid Option!")
+		fmt.Println("Invalid Option or Missing Arguments!")
+		printHelp()
 		os.Exit(1)
 	}
 }
