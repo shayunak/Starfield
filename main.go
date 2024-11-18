@@ -10,7 +10,7 @@ import (
 	"github.com/shayunak/SatSimGo/setup"
 )
 
-func calculateDistancesSettingsRun(consellationFile string, timeStepString string, totalSimulationTimeString string) {
+func calculateDistancesSettingsRun(consellationFile string, groundStationFile string, timeStepString string, totalSimulationTimeString string) {
 	timeStep, error := strconv.Atoi(timeStepString)
 	if error != nil {
 		fmt.Printf("2nd argument must be an integer, recieved %s!\n", timeStepString)
@@ -26,12 +26,12 @@ func calculateDistancesSettingsRun(consellationFile string, timeStepString strin
 	simulationDone := new(sync.WaitGroup)
 	simulationDone.Add(1)
 
-	setup.SetupSimulatorDistances(consellationFile, timeStep, totalSimulationTime, simulationDone)
+	setup.SetupSimulatorDistances(consellationFile, groundStationFile, timeStep, totalSimulationTime, simulationDone)
 
 	simulationDone.Wait() // waiting for the simulation to finish
 }
 
-func forwardingSettingsRun(consellationFile string, trafficFile string, forwardingFolder string, timeStepString string, totalSimulationTimeString string) {
+func forwardingSettingsRun(consellationFile string, groundStationFile string, trafficFile string, forwardingFolder string, timeStepString string, totalSimulationTimeString string) {
 	timeStep, error := strconv.Atoi(timeStepString)
 	if error != nil {
 		fmt.Printf("3rd argument must be an integer, recieved %s!\n", timeStepString)
@@ -47,15 +47,15 @@ func forwardingSettingsRun(consellationFile string, trafficFile string, forwardi
 	simulationDone := new(sync.WaitGroup)
 	simulationDone.Add(1)
 
-	setup.SetupForwardingSimulation(consellationFile, trafficFile, forwardingFolder, timeStep, totalSimulationTime, simulationDone)
+	setup.SetupForwardingSimulation(consellationFile, groundStationFile, trafficFile, forwardingFolder, timeStep, totalSimulationTime, simulationDone)
 
 	simulationDone.Wait() // waiting for the simulation to finish
 }
 
 func printHelp() {
 	fmt.Println("main.go --help")
-	fmt.Println("main.go --distances [consellation config file] [time step (ms)] [total simulation time (s)]")
-	fmt.Println("main.go --forwarding [consellation config file] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --distances [consellation config file] [ground station locations] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --forwarding [consellation config file] [ground station locations] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
 }
 
 func main() {
@@ -69,11 +69,14 @@ func main() {
 
 	if args[1] == "--help" && len(args) == 2 {
 		printHelp()
-	} else if args[1] == "--distances" && len(args) == 5 {
-		calculateDistancesSettingsRun(args[2], args[3], args[4])
+	} else if args[1] == "--distances" && len(args) == 6 {
+		calculateDistancesSettingsRun(args[2], args[3], args[4], args[5])
 		log.Default().Println("Distances Generated...")
-	} else if args[1] == "--forwarding" && len(args) == 7 {
-		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6])
+	} else if args[1] == "--forwarding" && len(args) == 8 {
+		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6], args[7])
+		log.Default().Println("Simulation Done...")
+	} else if args[1] == "--forwarding" && len(args) == 8 {
+		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6], args[7])
 		log.Default().Println("Simulation Done...")
 	} else {
 		fmt.Println("Invalid Option or Missing Arguments!")

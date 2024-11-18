@@ -10,7 +10,7 @@ type DistanceEntry struct {
 	TimeStamp         int
 	FirstSatelliteId  string
 	SecondSatelliteId string
-	Distance          float64
+	Distance          string
 }
 
 type IDistanceEntry interface {
@@ -34,7 +34,8 @@ func (entry *DistanceEntry) toSlice() []string {
 		fmt.Sprintf("%d", entry.TimeStamp),
 		entry.FirstSatelliteId,
 		entry.SecondSatelliteId,
-		fmt.Sprintf("%f", entry.Distance),
+		//fmt.Sprintf("%f", entry.Distance),
+		entry.Distance,
 	}
 }
 

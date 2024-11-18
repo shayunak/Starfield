@@ -9,26 +9,23 @@ import (
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
-type SatelliteList []actors.ISatellite
-
-func initSatellites(satellites *SatelliteList, config Config, timeStep int, totalSimulationTime int) {
+func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroundStationCalculation) {
+	inclinationRadians := config.OrbitConfig.Inclination * math.Pi / 180.0
 	minAscensionAngle := config.OrbitConfig.MinAscensionAngle
 	maxAscensionAngle := config.OrbitConfig.MaxAscensionAngle
 	numberOfOrbits := config.OrbitConfig.NumberOfOrbits
 	numberOfSatellitesPerOrbit := config.OrbitConfig.NumberOfSatellitesPerOrbit
-	inclinationRadians := config.OrbitConfig.Inclination * math.Pi / 180.0
-	orbit_radius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
-	weather_radius := config.OrbitConfig.EarthRadius + config.OrbitConfig.MinAltitudeISL
-	maxIslLenght := 2 * math.Sqrt(math.Pow(orbit_radius, 2)-math.Pow(weather_radius, 2))
 	ascensionStep := (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits)
+	orbitRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
 	anomalyStep := 360.0 / float64(numberOfSatellitesPerOrbit)
+	weatherRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.MinAltitudeISL
+	maxIslLenght := 2 * math.Sqrt(math.Pow(orbitRadius, 2)-math.Pow(weatherRadius, 2))
 	meanMotionRadiansPerSecond := config.SatelliteConfig.MeanMotionRevPerDay * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
-	totalSimulationTimeMilliseconds := totalSimulationTime * 1000 // in milliseconds
+	earthMotionRadiansPerSecond := config.OrbitConfig.EarthRotationPeriod * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
 
 	orbitalCalc := &helpers.OrbitalCalculations{
 		InclinationSinus:   math.Sin(inclinationRadians),
 		InclinationCosinus: math.Cos(inclinationRadians),
-		LengthLimitRatio:   1.0 - math.Pow(maxIslLenght/orbit_radius, 2)/2,
 		AscensionStep:      ascensionStep * (math.Pi / 180.0),
 		NumberOfOrbits:     numberOfOrbits,
 		MinAscensionAngle:  minAscensionAngle * math.Pi / 180.0,
@@ -37,47 +34,37 @@ func initSatellites(satellites *SatelliteList, config Config, timeStep int, tota
 
 	anomalyCalc := &helpers.AnomalyCalculations{
 		ConsellationName:           config.ConsellationName,
-		LengthLimitRatio:           1.0 - math.Pow(maxIslLenght/orbit_radius, 2)/2,
+		LengthLimitRatio:           1.0 - math.Pow(maxIslLenght/orbitRadius, 2)/2,
 		NumberOfSatellitesPerOrbit: numberOfSatellitesPerOrbit,
 		AnomalyStep:                anomalyStep * (math.Pi / 180.0),
 		MeanMotion:                 meanMotionRadiansPerSecond,
-		Radius:                     orbit_radius,
+		Radius:                     orbitRadius,
 		OrbitalCalculations:        orbitalCalc,
 		PhaseDiffEnabled:           config.OrbitConfig.PhaseDiffEnabled,
 	}
 
-	for orbit := 0; orbit < numberOfOrbits; orbit++ {
-		ascensionNodeDegree := minAscensionAngle + float64(orbit)*ascensionStep
-		phase_shift := 0.0
-
-		if config.OrbitConfig.PhaseDiffEnabled && orbit%2 == 1 {
-			phase_shift = anomalyStep / 2.0
-		}
-
-		orbit := helpers.NewOrbit(orbit_radius, config.OrbitConfig.Altitude, ascensionNodeDegree,
-			inclinationRadians, orbit, config.ConsellationName, phase_shift)
-
-		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
-			anomaly := phase_shift + float64(satellite)*anomalyStep
-
-			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds,
-				orbit, anomalyCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.NumberOfGSLs, config.SatelliteConfig.SpeedOfLightVac,
-				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime))
-
-		}
+	groundCalc := &helpers.GroundStationCalculation{
+		AnomalyCalculations: anomalyCalc,
+		ElevationLimitRatio: calculateElevationLimitRatio(config.OrbitConfig.EarthRadius, orbitRadius,
+			config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.MinAltitudeISL),
+		Altitude:           config.OrbitConfig.Altitude,
+		EarthOrbitRatio:    config.OrbitConfig.EarthRadius / orbitRadius,
+		EarthRotaionMotion: earthMotionRadiansPerSecond,
 	}
+
+	return anomalyCalc, groundCalc
 }
 
 func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int) {
 	*space = &actors.Space{
-		TotalSimulationTime:             totalSimulationTime,
-		SpaceSatelliteChannels:          nil,
-		DistancesSpaceSatelliteChannels: nil,
-		SatelliteNames:                  nil,
-		DistanceEntries:                 make(helpers.DistanceEntryList, 0),
-		ConsellationName:                config.ConsellationName,
-		TimeStep:                        timeStep,
-		TimeStamp:                       0,
+		TotalSimulationTime:    totalSimulationTime,
+		SpaceSatelliteChannels: nil,
+		DistancesSpaceChannels: nil,
+		SatelliteNames:         nil,
+		DistanceEntries:        make(helpers.DistanceEntryList, 0),
+		ConsellationName:       config.ConsellationName,
+		TimeStep:               timeStep,
+		TimeStamp:              0,
 	}
 }
 
@@ -89,57 +76,46 @@ func initTopology(satellites SatelliteList, entries map[string]map[string]connec
 	}
 }
 
-func startDistancesSatellites(satellites SatelliteList) *actors.DistanceSpaceSatelliteChannels {
-	channels := make(actors.DistanceSpaceSatelliteChannels, 0)
-	for _, satellite := range satellites {
-		channel := make(actors.DistanceSpaceSatelliteChannel)
-		channels = append(channels, &channel)
-		satellite.SetDistanceSpaceChannel(&channel)
-		satellite.RunDistances()
-	}
-	return &channels
-}
-
-func startSatellites(satellites SatelliteList) (*actors.SpaceSatelliteChannels, []string) {
-	channels := make(actors.SpaceSatelliteChannels, 0)
-	satelliteNames := make([]string, 0)
-	for _, satellite := range satellites {
-		channel := make(actors.SpaceSatelliteChannel)
-		channels = append(channels, &channel)
-		satelliteNames = append(satelliteNames, satellite.GetName())
-		satellite.SetSpaceChannel(&channel)
-		satellite.Run()
-	}
-	return &channels, satelliteNames
-}
-
-func SetupSimulatorDistances(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
+func SetupSimulatorDistances(configFileName string, groundStationFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
+	var groundStations GroundStationList
 	var space actors.ISpace
 
 	// reading the config file
 	config := getConfig(configFileName)
 
+	// initializing the calculators
+	anomalyCalc, groundCalc := initCalculators(config)
+
 	// initializing the actors
 	initSpace(&space, config, timeStep, totalSimulationTime)
-	initSatellites(&satellites, config, timeStep, totalSimulationTime)
+	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
 
 	// starting the actors
-	space.SetDistancesSatelliteChannels(startDistancesSatellites(satellites))
+	channels := startDistancesSatellites(satellites)
+	channels = append(channels, startDistancesGroundStations(groundStations)...)
+
+	space.SetDistancesDeviceChannels(&channels)
 	space.RunDistances(simulationDone)
 }
 
-func SetupForwardingSimulation(configFileName string, trafficFile string, forwardingFolder string, timeStep int,
+func SetupForwardingSimulation(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string, timeStep int,
 	totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
+	var groundStations GroundStationList
 	var space actors.ISpace
 
 	// reading the config file
 	config := getConfig(configFileName)
 
+	// initializing the calculators
+	anomalyCalc, groundCalc := initCalculators(config)
+
 	// initializing the actors
 	initSpace(&space, config, timeStep, totalSimulationTime)
-	initSatellites(&satellites, config, timeStep, totalSimulationTime)
+	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
 
 	// reading the traffic file
 	loadTrafficOnNodes(trafficFile, &satellites, config.SatelliteConfig.MaxPacketSize)
@@ -157,6 +133,7 @@ func SetupForwardingSimulation(configFileName string, trafficFile string, forwar
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	space.SetSatelliteChannels(startSatellites(satellites))
+	channels, satelliteNames := startSatellites(satellites)
+	space.SetSatelliteChannels(&channels, satelliteNames)
 	space.Run(simulationDone)
 }

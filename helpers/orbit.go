@@ -5,6 +5,11 @@ import (
 	"math"
 )
 
+type GroundStationEntry struct {
+	Name       string
+	CalcValues OrbitCalc
+}
+
 type CartesianCoordinates struct {
 	X float64 // in meters
 	Y float64 // in meters
@@ -12,20 +17,25 @@ type CartesianCoordinates struct {
 }
 
 type Orbit struct {
-	Id               int
-	ConsellationName string
-	Radius           float64 // in meters
-	Altitude         float64 // in meters
-	Ascension        float64 // in radians
-	Inclination      float64 // in radians
-	OrbitPhaseDiff   float64 // in radians
+	Id                          int
+	ConsellationName            string
+	Radius                      float64             // in meters
+	EarthRotaionMotion          float64             // in radians per second
+	Altitude                    float64             // in meters
+	Ascension                   float64             // in radians
+	Inclination                 float64             // in radians
+	OrbitPhaseDiff              float64             // in radians
+	GroundStations              *GroundStationSpecs // ground stations covered by the orbit
+	GroundStationsDistanceLimit float64
 }
 
 type IOrbit interface {
 	GetOrbitNumber() int
 	GetOrbitId() string
 	GetOrbitName() string
+	GetAscension() float64
 	ConvertToCartesian(anomaly float64) CartesianCoordinates
+	GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]DistanceObject
 }
 
 func (orbit *Orbit) GetOrbitName() string {
@@ -44,6 +54,10 @@ func (orbit *Orbit) GetOrbitNumber() int {
 	return orbit.Id
 }
 
+func (orbit *Orbit) GetAscension() float64 {
+	return orbit.Ascension
+}
+
 func (orbit *Orbit) ConvertToCartesian(anomaly float64) CartesianCoordinates {
 	return CartesianCoordinates{
 		X: orbit.Radius * (math.Cos(anomaly)*math.Cos(orbit.Ascension) -
@@ -54,22 +68,60 @@ func (orbit *Orbit) ConvertToCartesian(anomaly float64) CartesianCoordinates {
 	}
 }
 
-func NewOrbit(radius float64, altitude float64, ascension float64, inclination float64, id int,
-	consellationName string, phaseDiff float64) IOrbit {
+func NewOrbit(radius float64, earthRotationMotion float64, altitude float64, ascension float64, inclination float64, id int,
+	consellationName string, phaseDiff float64, groundStationSpecs *GroundStationSpecs, groundStationDistanceLimit float64) IOrbit {
 	var newOrbit Orbit
 
 	ascensionRadians := ascension * (math.Pi / 180.0)
 	phaseDiffRadians := phaseDiff * (math.Pi / 180.0)
 
 	newOrbit = Orbit{
-		Id:               id,
-		ConsellationName: consellationName,
-		Radius:           radius,
-		Altitude:         altitude,
-		Ascension:        ascensionRadians,
-		Inclination:      inclination,
-		OrbitPhaseDiff:   phaseDiffRadians,
+		Id:                          id,
+		ConsellationName:            consellationName,
+		Radius:                      radius,
+		EarthRotaionMotion:          earthRotationMotion,
+		Altitude:                    altitude,
+		Ascension:                   ascensionRadians,
+		Inclination:                 inclination,
+		OrbitPhaseDiff:              phaseDiffRadians,
+		GroundStations:              groundStationSpecs,
+		GroundStationsDistanceLimit: groundStationDistanceLimit,
 	}
 
 	return &newOrbit
+}
+
+func (orbit *Orbit) calculateGSDistance(headPointAnomalyEl AnomalyElements, headPointAscension float64, anomaly float64, anomalyCalculation IAnomalyCalculation) float64 {
+	orbitalCalculations := anomalyCalculation.GetOrbitalCalculations()
+	ascensionDiff := headPointAscension - orbit.Ascension
+
+	orbitalCalc := OrbitCalc{
+		CosinalCoefficient: orbitalCalculations.calculateCosinalCoefficient(headPointAnomalyEl, ascensionDiff),
+		SinalCoefficient:   orbitalCalculations.calculateSinalCoefficient(headPointAnomalyEl, ascensionDiff),
+		AscensionDiff:      ascensionDiff,
+	}
+
+	return anomalyCalculation.CalculateDistance(orbitalCalc, anomaly)
+}
+
+func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]DistanceObject {
+	distances := make(map[string]DistanceObject)
+	earthOrbitRatio := 1.0 - orbit.Altitude/orbit.Radius
+
+	for gsName, gsSpec := range *orbit.GroundStations {
+		gsAscension := gsSpec.HeadPointAscension + orbit.EarthRotaionMotion*timeStamp
+		distance := orbit.calculateGSDistance(gsSpec.HeadPointAnomalyEl, gsAscension, anomaly, anomalyCalculation)
+
+		if distance < orbit.GroundStationsDistanceLimit {
+			updatedDistance := math.Sqrt(math.Pow(orbit.Altitude, 2.0) + earthOrbitRatio*math.Pow(distance, 2.0))
+			distances[gsName] = DistanceObject{
+				Distance: updatedDistance,
+				Anomaly:  anomaly,
+				AscensionDiff:/*gsAscension - orbit.Ascension,*/ "",
+				A: gsSpec.HeadPointAnomalyEl.AnomalyCosinus,
+				B: gsSpec.HeadPointAnomalyEl.AnomalySinus,
+			}
+		}
+	}
+	return distances
 }

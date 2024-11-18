@@ -2,6 +2,7 @@
     "name": "Starlink",
     "orbit_config": {
         "earth_radius": 6378135.0,
+        "earth_rotation_period": 1.0,
         "altitude": 550000.0,
         "min_altitude_isl": 80000.0,
         "inclination": 53,

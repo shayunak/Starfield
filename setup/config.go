@@ -9,12 +9,13 @@ import (
 )
 
 type OrbitConfig struct {
-	EarthRadius                float64 `json:"earth_radius"`        // in meters
-	Altitude                   float64 `json:"altitude"`            // in meters
-	MinAltitudeISL             float64 `json:"min_altitude_isl"`    // in meters (for weather conditions)
-	Inclination                float64 `json:"inclination"`         // in meters
-	MinAscensionAngle          float64 `json:"min_ascension_angle"` // in degrees
-	MaxAscensionAngle          float64 `json:"max_ascension_angle"` // in meters
+	EarthRadius                float64 `json:"earth_radius"`          // in meters
+	Altitude                   float64 `json:"altitude"`              // in meters
+	EarthRotationPeriod        float64 `json:"earth_rotation_period"` // in number of revolutions per day
+	MinAltitudeISL             float64 `json:"min_altitude_isl"`      // in meters (for weather conditions)
+	Inclination                float64 `json:"inclination"`           // in meters
+	MinAscensionAngle          float64 `json:"min_ascension_angle"`   // in degrees
+	MaxAscensionAngle          float64 `json:"max_ascension_angle"`   // in meters
 	NumberOfOrbits             int     `json:"number_of_orbits"`
 	NumberOfSatellitesPerOrbit int     `json:"number_of_satellites_per_orbit"`
 	PhaseDiffEnabled           bool    `json:"phase_diff_enabled"` // gives a half-cycle phase difference to odd number orbits
@@ -23,6 +24,7 @@ type OrbitConfig struct {
 type SatelliteConfig struct {
 	MeanMotionRevPerDay float64 `json:"mean_motion_rev_per_day"` // in number of revolutions per day
 	ConeRadius          float64 `json:"cone_radius"`             // in meters
+	MinElevationAngle   float64 `json:"min_elevation_angle"`
 	NumberOfISLs        int     `json:"number_of_isls"`
 	NumberOfGSLs        int     `json:"number of GSLs"`
 	ISLBandwidth        float64 `json:"isl_bandwidth"`         // in Mbps

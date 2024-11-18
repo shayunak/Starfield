@@ -47,7 +47,7 @@ type Satellite struct {
 	GSLInterfaces        []connections.INetworkInterface
 	AvailableISL         int
 	AvailableGSL         int
-	DistanceSpaceChannel *DistanceSpaceSatelliteChannel
+	DistanceSpaceChannel *DistanceSpaceDeviceChannel
 	SpaceChannel         *SpaceSatelliteChannel
 }
 
@@ -57,15 +57,16 @@ type ISatellite interface {
 	SetForwardingFile(folder string)
 	GetSpaceChannel() *SpaceSatelliteChannel
 	SetSpaceChannel(channel *SpaceSatelliteChannel)
-	GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel
-	SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel)
+	GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel
+	SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel)
 	GetName() string
-	FindSatellitesInRange() map[string]float64
 	GenerateTraffic(traffic []TrafficEntry, maxPacketSize int)
 	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	ReceiveFromInterfaces()
 	SendPackets()
+	findSatellitesInRange() map[string]helpers.DistanceObject
+	findGroundStationsInRange() map[string]helpers.DistanceObject
 	findAvailableISLInterfaceId() int
 	generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet
 	getTimeStamp() int
@@ -86,9 +87,16 @@ func (satellite *Satellite) GetName() string {
 	return satellite.Name
 }
 
-func (satellite *Satellite) FindSatellitesInRange() map[string]float64 {
-	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Id, satellite.OrbitalAnomaly,
-		satellite.AnomalyElements, satellite.Orbit.GetOrbitNumber(), float64(satellite.TimeStamp)*0.001)
+func (satellite *Satellite) findSatellitesInRange() map[string]helpers.DistanceObject {
+	satelliteOrbitalAscension := satellite.Orbit.GetAscension()
+	lengthLimitRatio := satellite.AnomalyCalculations.GetLengthLimitRatio()
+	return satellite.AnomalyCalculations.FindSatellitesInRange(lengthLimitRatio, satellite.OrbitalAnomaly, satellite.AnomalyElements,
+		satelliteOrbitalAscension, float64(satellite.TimeStamp)*0.001)
+}
+
+func (satellite *Satellite) findGroundStationsInRange() map[string]helpers.DistanceObject {
+	return satellite.Orbit.GetCoveringGroundStations(float64(satellite.TimeStamp)*0.001, satellite.OrbitalAnomaly,
+		satellite.AnomalyCalculations)
 }
 
 func (satellite *Satellite) getTimeStamp() int {
@@ -242,11 +250,11 @@ func (satellite *Satellite) SetSpaceChannel(channel *SpaceSatelliteChannel) {
 	satellite.SpaceChannel = channel
 }
 
-func (satellite *Satellite) GetDistanceSpaceChannel() *DistanceSpaceSatelliteChannel {
+func (satellite *Satellite) GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel {
 	return satellite.DistanceSpaceChannel
 }
 
-func (satellite *Satellite) SetDistanceSpaceChannel(channel *DistanceSpaceSatelliteChannel) {
+func (satellite *Satellite) SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel) {
 	satellite.DistanceSpaceChannel = channel
 }
 
@@ -259,12 +267,27 @@ func (satellite *Satellite) nextTimeStep() {
 	satellite.TimeStamp += satellite.Dt
 }
 
+func mergeMaps(satelliteMap map[string]helpers.DistanceObject, groundStationMap map[string]helpers.DistanceObject) map[string]helpers.DistanceObject {
+	mergedMap := make(map[string]helpers.DistanceObject)
+
+	for key, value := range satelliteMap {
+		mergedMap[key] = value
+	}
+	for key, value := range groundStationMap {
+		mergedMap[key] = value
+	}
+
+	return mergedMap
+}
+
 func (satellite *Satellite) updateSpaceOnDistances() {
+	satelliteDistances := satellite.findSatellitesInRange()
+	groundStationDistances := satellite.findGroundStationsInRange()
+
 	(*satellite.DistanceSpaceChannel) <- UpdateDistancesMessage{
-		SatelliteName:    satellite.Name,
-		SatelliteAnomaly: satellite.OrbitalAnomaly,
-		TimeStamp:        satellite.TimeStamp,
-		Distances:        satellite.FindSatellitesInRange(),
+		DeviceName: satellite.Name,
+		TimeStamp:  satellite.TimeStamp,
+		Distances:  mergeMaps(satelliteDistances, groundStationDistances),
 	}
 }
 
@@ -307,8 +330,8 @@ func startSatelliteDistances(mySatellite ISatellite) {
 func startSatellite(mySatellite ISatellite) {
 	mySatellite.loadForwardingTableInMemory()
 	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
-		satellitesInRange := mySatellite.FindSatellitesInRange()
-		mySatellite.updateLinks(satellitesInRange)
+		//satellitesInRange := mySatellite.findSatellitesInRange()
+		//mySatellite.updateLinks(satellitesInRange)
 		mySatellite.ReceiveFromInterfaces()
 		mySatellite.SendPackets()
 		mySatellite.nextTimeStep()

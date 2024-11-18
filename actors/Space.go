@@ -24,15 +24,14 @@ type Space struct {
 	SpaceSatelliteChannels *SpaceSatelliteChannels
 	SatelliteNames         []string
 	// Distances Mode
-	DistancesSpaceSatelliteChannels *DistanceSpaceSatelliteChannels
-	DistanceEntries                 helpers.DistanceEntryList
+	DistancesSpaceChannels *DistanceSpaceDeviceChannels
+	DistanceEntries        helpers.DistanceEntryList
 }
 
 type UpdateDistancesMessage struct {
-	SatelliteName    string
-	SatelliteAnomaly float64
-	TimeStamp        int
-	Distances        map[string]float64
+	DeviceName string
+	TimeStamp  int
+	Distances  map[string]helpers.DistanceObject
 }
 
 type LinkChannelRequest struct {
@@ -43,18 +42,18 @@ type LinkChannelRequest struct {
 	SendChannel       *chan connections.Packet
 }
 
-type DistanceSpaceSatelliteChannel chan UpdateDistancesMessage
+type DistanceSpaceDeviceChannel chan UpdateDistancesMessage
 type SpaceSatelliteChannel chan LinkChannelRequest
 
-type DistanceSpaceSatelliteChannels []*DistanceSpaceSatelliteChannel
+type DistanceSpaceDeviceChannels []*DistanceSpaceDeviceChannel
 type SpaceSatelliteChannels []*SpaceSatelliteChannel
 
 type ISpace interface {
 	// Distances Mode
 	RunDistances(wg *sync.WaitGroup)
-	GetDistancesSatelliteChannels() *DistanceSpaceSatelliteChannels
-	SetDistancesSatelliteChannels(channels *DistanceSpaceSatelliteChannels)
-	GetDistancesNumberOfSatellites() int
+	GetDistancesDeviceChannels() *DistanceSpaceDeviceChannels
+	SetDistancesDeviceChannels(channels *DistanceSpaceDeviceChannels)
+	GetDistancesNumberOfDevices() int
 	addNewDistanceEntries(distancesMessage UpdateDistancesMessage)
 	addNewDistanceEntry(entry *helpers.DistanceEntry)
 	logDistancesSimulationSummary()
@@ -70,21 +69,21 @@ type ISpace interface {
 }
 
 func initDistancesChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
-	channels := *space.GetDistancesSatelliteChannels()
+	channels := *space.GetDistancesDeviceChannels()
 	for i, channel := range channels {
 		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
 }
 
 func deleteDistancesSatellite(space ISpace, index int) {
-	satellites := *space.GetDistancesSatelliteChannels()
+	satellites := *space.GetDistancesDeviceChannels()
 	satellites = append(satellites[:index], satellites[index+1:]...)
-	space.SetDistancesSatelliteChannels(&satellites)
+	space.SetDistancesDeviceChannels(&satellites)
 }
 
 func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
-	for space.GetDistancesNumberOfSatellites() > 0 {
-		selectSatellitesCases := make([]reflect.SelectCase, space.GetDistancesNumberOfSatellites())
+	for space.GetDistancesNumberOfDevices() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, space.GetDistancesNumberOfDevices())
 		initDistancesChannelCases(&selectSatellitesCases, space)
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
@@ -107,9 +106,10 @@ func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessag
 	for satelliteId, distance := range satellites {
 		space.addNewDistanceEntry(&helpers.DistanceEntry{
 			TimeStamp:         distancesMessage.TimeStamp,
-			FirstSatelliteId:  distancesMessage.SatelliteName,
+			FirstSatelliteId:  distancesMessage.DeviceName,
 			SecondSatelliteId: satelliteId,
-			Distance:          distance,
+			//Distance:          distance,
+			Distance: fmt.Sprintf("%f, %f, %f, %f, %f", distance.Distance, distance.AscensionDiff, distance.Anomaly, distance.A, distance.B),
 		})
 	}
 	if space.TimeStamp < distancesMessage.TimeStamp {
@@ -117,16 +117,16 @@ func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessag
 	}
 }
 
-func (space *Space) GetDistancesSatelliteChannels() *DistanceSpaceSatelliteChannels {
-	return space.DistancesSpaceSatelliteChannels
+func (space *Space) GetDistancesDeviceChannels() *DistanceSpaceDeviceChannels {
+	return space.DistancesSpaceChannels
 }
 
-func (space *Space) GetDistancesNumberOfSatellites() int {
-	return len(*space.DistancesSpaceSatelliteChannels)
+func (space *Space) GetDistancesNumberOfDevices() int {
+	return len(*space.DistancesSpaceChannels)
 }
 
-func (space *Space) SetDistancesSatelliteChannels(channels *DistanceSpaceSatelliteChannels) {
-	space.DistancesSpaceSatelliteChannels = channels
+func (space *Space) SetDistancesDeviceChannels(channels *DistanceSpaceDeviceChannels) {
+	space.DistancesSpaceChannels = channels
 }
 
 func (space *Space) addNewDistanceEntry(entry *helpers.DistanceEntry) {
