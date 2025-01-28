@@ -28,10 +28,13 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	numberOfSatellitesPerOrbit := config.OrbitConfig.NumberOfSatellitesPerOrbit
 	inclinationRadians := config.OrbitConfig.Inclination * math.Pi / 180.0
 	orbitRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
-	ascensionStep := (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits)
 	anomalyStep := 360.0 / float64(numberOfSatellitesPerOrbit)
 	totalSimulationTimeMilliseconds := totalSimulationTime * 1000 // in milliseconds
 	earthMotionRadiansPerSecond := config.OrbitConfig.EarthRotationPeriod * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
+	ascensionStep := 0.0
+	if numberOfOrbits > 1 {
+		ascensionStep = (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits-1)
+	}
 
 	for orbit := 0; orbit < numberOfOrbits; orbit++ {
 		ascensionNodeDegree := minAscensionAngle + float64(orbit)*ascensionStep

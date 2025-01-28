@@ -54,8 +54,8 @@ func (anomalyCalc *AnomalyCalculations) CalculateDistance(orbitCalc OrbitCalc, o
 func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(lengthLimitRatio float64, currentAnomaly float64,
 	orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]DistanceObject {
 	satellites := make(map[int]DistanceObject)
-	orbitalCalcSize := math.Sqrt(math.Pow(orbitCalc.CosinalCoefficient, 2) + math.Pow(orbitCalc.SinalCoefficient, 2))
-	boundedAnomaly := math.Mod(currentAnomaly, 2*math.Pi)
+	orbitalCalcSize := math.Sqrt(math.Pow(orbitCalc.CosinalCoefficient, 2.0) + math.Pow(orbitCalc.SinalCoefficient, 2.0))
+	boundedAnomaly := math.Mod(currentAnomaly, 2.0*math.Pi)
 	limitTerm := math.Asin(lengthLimitRatio / orbitalCalcSize)
 	phaseTerm := math.Atan(orbitCalc.CosinalCoefficient / orbitCalc.SinalCoefficient)
 

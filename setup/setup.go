@@ -15,13 +15,16 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	maxAscensionAngle := config.OrbitConfig.MaxAscensionAngle
 	numberOfOrbits := config.OrbitConfig.NumberOfOrbits
 	numberOfSatellitesPerOrbit := config.OrbitConfig.NumberOfSatellitesPerOrbit
-	ascensionStep := (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits)
 	orbitRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
 	anomalyStep := 360.0 / float64(numberOfSatellitesPerOrbit)
 	weatherRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.MinAltitudeISL
 	maxIslLenght := 2 * math.Sqrt(math.Pow(orbitRadius, 2)-math.Pow(weatherRadius, 2))
 	meanMotionRadiansPerSecond := config.SatelliteConfig.MeanMotionRevPerDay * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
 	earthMotionRadiansPerSecond := config.OrbitConfig.EarthRotationPeriod * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
+	ascensionStep := 0.0
+	if numberOfOrbits > 1 {
+		ascensionStep = (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits-1)
+	}
 
 	orbitalCalc := &helpers.OrbitalCalculations{
 		InclinationSinus:   math.Sin(inclinationRadians),
