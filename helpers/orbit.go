@@ -115,11 +115,11 @@ func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64
 		if distance < orbit.GroundStationsDistanceLimit {
 			updatedDistance := math.Sqrt(math.Pow(orbit.Altitude, 2.0) + earthOrbitRatio*math.Pow(distance, 2.0))
 			distances[gsName] = DistanceObject{
-				Distance: updatedDistance,
-				Anomaly:  anomaly,
-				AscensionDiff:/*gsAscension - orbit.Ascension,*/ "",
-				A: gsSpec.HeadPointAnomalyEl.AnomalyCosinus,
-				B: gsSpec.HeadPointAnomalyEl.AnomalySinus,
+				Distance:      updatedDistance,
+				Anomaly:       anomaly,
+				AscensionDiff: gsAscension - orbit.Ascension,
+				A:             gsSpec.HeadPointAnomalyEl.AnomalyCosinus,
+				B:             gsSpec.HeadPointAnomalyEl.AnomalySinus,
 			}
 		}
 	}

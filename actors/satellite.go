@@ -90,7 +90,7 @@ func (satellite *Satellite) GetName() string {
 func (satellite *Satellite) findSatellitesInRange() map[string]helpers.DistanceObject {
 	satelliteOrbitalAscension := satellite.Orbit.GetAscension()
 	lengthLimitRatio := satellite.AnomalyCalculations.GetLengthLimitRatio()
-	return satellite.AnomalyCalculations.FindSatellitesInRange(lengthLimitRatio, satellite.OrbitalAnomaly, satellite.AnomalyElements,
+	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Name, lengthLimitRatio, satellite.OrbitalAnomaly, satellite.AnomalyElements,
 		satelliteOrbitalAscension, float64(satellite.TimeStamp)*0.001)
 }
 

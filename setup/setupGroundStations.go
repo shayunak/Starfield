@@ -66,9 +66,9 @@ func initGroundStations(groundStations *GroundStationList, groundStationFileName
 			fmt.Println("Cannot convert longitude of ground station ", record[2], ":", err)
 			continue
 		}
-		groundStationLatitude := latitude * math.Pi / 180
-		groundStationLongitude := longitude * math.Pi / 180
-		ascension, anomaly := groundCalc.FindCoordinatesOfTheAboveHeadPoint(groundStationLatitude, groundStationLongitude)
+		groundStationLatitude := latitude * math.Pi / 180.0
+		groundStationLongitude := longitude * math.Pi / 180.0
+		ascension, anomaly := groundCalc.FindCoordinatesOfTheAboveHeadPoint(groundStationName, groundStationLatitude, groundStationLongitude)
 		anomalyEl := helpers.AnomalyElements{
 			AnomalySinus:   math.Sin(anomaly),
 			AnomalyCosinus: math.Cos(anomaly),

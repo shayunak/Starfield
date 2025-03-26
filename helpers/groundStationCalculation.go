@@ -22,8 +22,8 @@ type GroundStationCalculation struct {
 }
 
 type IGroundStationCalculation interface {
-	FindCoordinatesOfTheAboveHeadPoint(latitude float64, longitude float64) (float64, float64)
-	FindSatellitesInRange(headPointAnomaly float64, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]DistanceObject
+	FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64)
+	FindSatellitesInRange(Id string, headPointAnomaly float64, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]DistanceObject
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
 	UpdatePosition(prevAscension float64, timeStep float64) float64
 }
@@ -44,17 +44,19 @@ func (gsc *GroundStationCalculation) UpdatePosition(prevAscension float64, timeS
 	return prevAscension + gsc.EarthRotaionMotion*timeStep
 }
 
-func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(latitude float64, longitude float64) (float64, float64) {
+func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64) {
 	inclinationSinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationSinus()
 	inclinationCosinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationCosinus()
 	latitudeSinus := math.Sin(latitude)
-	adjustedLongitude := math.Mod(longitude+2*math.Pi, 2*math.Pi)
+	adjustedLongitude := math.Mod(longitude+2.0*math.Pi, 2.0*math.Pi)
+
+	//println(gsName, adjustedLongitude, latitudeSinus)
 
 	if math.Abs(latitudeSinus) >= inclinationSinus {
 		if latitude < 0 {
-			return math.Mod(longitude+3.0*math.Pi/2.0, 2*math.Pi), 3.0 * math.Pi / 2.0
+			return math.Mod(adjustedLongitude+math.Pi/2.0, 2.0*math.Pi), 3.0 * math.Pi / 2.0
 		} else {
-			return math.Mod(longitude+math.Pi/2.0, 2*math.Pi), math.Pi / 2.0
+			return math.Mod(adjustedLongitude+3.0*math.Pi/2.0, 2.0*math.Pi), math.Pi / 2.0
 		}
 	}
 	anomaly := math.Asin(latitudeSinus / inclinationSinus)
@@ -63,20 +65,20 @@ func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(latitude
 	return gsc.adjustAngles(anomaly, deltaLongitude, adjustedLongitude)
 }
 
-func (gsc *GroundStationCalculation) FindSatellitesInRange(headPointAnomaly float64, headPointAscension float64,
+func (gsc *GroundStationCalculation) FindSatellitesInRange(Id string, headPointAnomaly float64, headPointAscension float64,
 	headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]DistanceObject {
 
-	satelliteDistances := gsc.AnomalyCalculations.FindSatellitesInRange(gsc.ElevationLimitRatio, headPointAnomaly,
+	satelliteDistances := gsc.AnomalyCalculations.FindSatellitesInRange(Id, gsc.ElevationLimitRatio, headPointAnomaly,
 		headPointAnomalyEl, headPointAscension, timeStamp)
 
 	for id, distanceObject := range satelliteDistances {
 		updatedDistance := math.Sqrt(math.Pow(gsc.Altitude, 2.0) + gsc.EarthOrbitRatio*math.Pow(distanceObject.Distance, 2.0))
 		newDistanceObject := DistanceObject{
-			Distance:      updatedDistance,
-			Anomaly:       distanceObject.Anomaly,
-			AscensionDiff: distanceObject.AscensionDiff,
+			Distance: updatedDistance,
+			Anomaly:  distanceObject.Anomaly,
+			/*AscensionDiff: distanceObject.AscensionDiff,
 			A:             distanceObject.A,
-			B:             distanceObject.B,
+			B:             distanceObject.B,*/
 		}
 		satelliteDistances[id] = newDistanceObject
 	}

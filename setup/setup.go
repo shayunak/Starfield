@@ -49,7 +49,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	groundCalc := &helpers.GroundStationCalculation{
 		AnomalyCalculations: anomalyCalc,
 		ElevationLimitRatio: calculateElevationLimitRatio(config.OrbitConfig.EarthRadius, orbitRadius,
-			config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.MinAltitudeISL),
+			config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
 		Altitude:           config.OrbitConfig.Altitude,
 		EarthOrbitRatio:    config.OrbitConfig.EarthRadius / orbitRadius,
 		EarthRotaionMotion: earthMotionRadiansPerSecond,

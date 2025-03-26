@@ -15,7 +15,7 @@
     "satellite_config": {
         "speed_of_light_vac": 299792458.0,
         "mean_motion_rev_per_day": 15.19,
-        "min_elevation_angle": 20.0,
+        "min_elevation_angle": 30.0,
         "number_of_isls": 4,
         "number of GSLs": 3,
         "isl_bandwidth": 1000000.0,

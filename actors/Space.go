@@ -108,8 +108,8 @@ func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessag
 			TimeStamp:         distancesMessage.TimeStamp,
 			FirstSatelliteId:  distancesMessage.DeviceName,
 			SecondSatelliteId: satelliteId,
-			//Distance:          distance,
-			Distance: fmt.Sprintf("%f, %f, %f, %f, %f", distance.Distance, distance.AscensionDiff, distance.Anomaly, distance.A, distance.B),
+			Distance:          fmt.Sprintf("%d", int(distance.Distance)),
+			//Distance: fmt.Sprintf("%f, %f, %f, %f, %f", distance.Distance, distance.AscensionDiff, distance.Anomaly, distance.A, distance.B),
 		})
 	}
 	if space.TimeStamp < distancesMessage.TimeStamp {
