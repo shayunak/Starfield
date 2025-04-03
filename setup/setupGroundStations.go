@@ -44,6 +44,7 @@ func openGroundStationFiles(fileName string) (*os.File, *csv.Reader) {
 func initGroundStations(groundStations *GroundStationList, groundStationFileName string,
 	groundCalc helpers.IGroundStationCalculation, timeStep int, totalSimulationTime int) *helpers.GroundStationSpecs {
 
+	totalSimulationTimeMilliseconds := totalSimulationTime * 1000
 	groundStationFile, groundStationCoordinates := openGroundStationFiles(groundStationFileName)
 	groundStationSpecs := make(helpers.GroundStationSpecs)
 
@@ -81,7 +82,7 @@ func initGroundStations(groundStations *GroundStationList, groundStationFileName
 		}
 		*groundStations = append(*groundStations,
 			actors.NewGroundStation(groundStationName, groundStationLatitude, groundStationLongitude, timeStep,
-				totalSimulationTime, anomaly, ascension, groundCalc, anomalyEl),
+				totalSimulationTimeMilliseconds, anomaly, ascension, groundCalc, anomalyEl),
 		)
 	}
 	groundStationFile.Close()

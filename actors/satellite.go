@@ -65,8 +65,8 @@ type ISatellite interface {
 	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	ReceiveFromInterfaces()
 	SendPackets()
-	findSatellitesInRange() map[string]helpers.DistanceObject
-	findGroundStationsInRange() map[string]helpers.DistanceObject
+	findSatellitesInRange() map[string]float64
+	findGroundStationsInRange() map[string]float64
 	findAvailableISLInterfaceId() int
 	generatePackets(maxPacketSize int, entry TrafficEntry) []connections.Packet
 	getTimeStamp() int
@@ -87,14 +87,14 @@ func (satellite *Satellite) GetName() string {
 	return satellite.Name
 }
 
-func (satellite *Satellite) findSatellitesInRange() map[string]helpers.DistanceObject {
+func (satellite *Satellite) findSatellitesInRange() map[string]float64 {
 	satelliteOrbitalAscension := satellite.Orbit.GetAscension()
 	lengthLimitRatio := satellite.AnomalyCalculations.GetLengthLimitRatio()
-	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Name, lengthLimitRatio, satellite.OrbitalAnomaly, satellite.AnomalyElements,
+	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Name, lengthLimitRatio, satellite.AnomalyElements,
 		satelliteOrbitalAscension, float64(satellite.TimeStamp)*0.001)
 }
 
-func (satellite *Satellite) findGroundStationsInRange() map[string]helpers.DistanceObject {
+func (satellite *Satellite) findGroundStationsInRange() map[string]float64 {
 	return satellite.Orbit.GetCoveringGroundStations(float64(satellite.TimeStamp)*0.001, satellite.OrbitalAnomaly,
 		satellite.AnomalyCalculations)
 }
@@ -267,8 +267,8 @@ func (satellite *Satellite) nextTimeStep() {
 	satellite.TimeStamp += satellite.Dt
 }
 
-func mergeMaps(satelliteMap map[string]helpers.DistanceObject, groundStationMap map[string]helpers.DistanceObject) map[string]helpers.DistanceObject {
-	mergedMap := make(map[string]helpers.DistanceObject)
+func mergeMaps(satelliteMap map[string]float64, groundStationMap map[string]float64) map[string]float64 {
+	mergedMap := make(map[string]float64)
 
 	for key, value := range satelliteMap {
 		mergedMap[key] = value

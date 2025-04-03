@@ -10,7 +10,7 @@ type DistanceEntry struct {
 	TimeStamp         int
 	FirstSatelliteId  string
 	SecondSatelliteId string
-	Distance          string
+	Distance          int
 }
 
 type IDistanceEntry interface {
@@ -24,8 +24,6 @@ func (entry *DistanceEntry) GetTimeStamp() int {
 }
 
 func (entry *DistanceEntry) getHeaders() []string {
-	/*return []string{"TimeStamp", "FirstSatelliteId", "FirstSatelliteAnomaly", "SecondSatelliteId", "SecondSatelliteAnomaly",
-	"AscensionDiff", "A", "B", "Distance"}*/
 	return []string{"TimeStamp", "FirstSatelliteId", "SecondSatelliteId", "Distance"}
 }
 
@@ -34,8 +32,7 @@ func (entry *DistanceEntry) toSlice() []string {
 		fmt.Sprintf("%d", entry.TimeStamp),
 		entry.FirstSatelliteId,
 		entry.SecondSatelliteId,
-		//fmt.Sprintf("%f", entry.Distance),
-		entry.Distance,
+		fmt.Sprintf("%d", entry.Distance),
 	}
 }
 

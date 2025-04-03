@@ -35,7 +35,7 @@ type IOrbit interface {
 	GetOrbitName() string
 	GetAscension() float64
 	ConvertToCartesian(anomaly float64) CartesianCoordinates
-	GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]DistanceObject
+	GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]float64
 }
 
 func (orbit *Orbit) GetOrbitName() string {
@@ -104,8 +104,8 @@ func (orbit *Orbit) calculateGSDistance(headPointAnomalyEl AnomalyElements, head
 	return anomalyCalculation.CalculateDistance(orbitalCalc, anomaly)
 }
 
-func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]DistanceObject {
-	distances := make(map[string]DistanceObject)
+func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64, anomalyCalculation IAnomalyCalculation) map[string]float64 {
+	distances := make(map[string]float64)
 	earthOrbitRatio := 1.0 - orbit.Altitude/orbit.Radius
 
 	for gsName, gsSpec := range *orbit.GroundStations {
@@ -114,13 +114,7 @@ func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64
 
 		if distance < orbit.GroundStationsDistanceLimit {
 			updatedDistance := math.Sqrt(math.Pow(orbit.Altitude, 2.0) + earthOrbitRatio*math.Pow(distance, 2.0))
-			distances[gsName] = DistanceObject{
-				Distance:      updatedDistance,
-				Anomaly:       anomaly,
-				AscensionDiff: gsAscension - orbit.Ascension,
-				A:             gsSpec.HeadPointAnomalyEl.AnomalyCosinus,
-				B:             gsSpec.HeadPointAnomalyEl.AnomalySinus,
-			}
+			distances[gsName] = updatedDistance
 		}
 	}
 	return distances

@@ -10,21 +10,21 @@ type AnomalyElements struct {
 	AnomalyCosinus float64
 }
 
-type DistanceObject struct {
+/*type DistanceObject struct {
 	Distance      float64
 	Anomaly       float64
-	AscensionDiff float64
+	AscensionDiff string
 	A             float64
 	B             float64
-}
+}*/
 
 type IAnomalyCalculation interface {
-	FindSatellitesInRange(Id string, lengthLimitRatio float64, currentAnomaly float64, anomalyEl AnomalyElements, orbitalAscension float64, timeStamp float64) map[string]DistanceObject
+	FindSatellitesInRange(Id string, lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, timeStamp float64) map[string]float64
 	UpdatePosition(prevAnomaly float64, timeStep float64) (float64, AnomalyElements)
 	CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int, secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64
 	GetOrbitalCalculations() IOrbitalCalculations
 	GetLengthLimitRatio() float64
-	calculateSatelliteIdInRange(orbitalAscension float64, lengthLimitRatio float64, currentAnomaly float64, orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]DistanceObject
+	calculateSatelliteIdInRange(lengthLimitRatio float64, orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]float64
 	CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64
 	calculatePhase(satelliteId int, orbitId int) float64
 }
@@ -51,22 +51,12 @@ func (anomalyCalc *AnomalyCalculations) CalculateDistance(orbitCalc OrbitCalc, o
 	return anomalyCalc.Radius * math.Sqrt(distance_squared_factor)
 }
 
-func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbitalAscension float64, lengthLimitRatio float64, currentAnomaly float64,
-	orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]DistanceObject {
-	satellites := make(map[int]DistanceObject)
+func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(lengthLimitRatio float64, orbitCalc OrbitCalc,
+	timeStamp float64, orbit int) map[int]float64 {
+	satellites := make(map[int]float64)
 	orbitalCalcSize := math.Sqrt(math.Pow(orbitCalc.CosinalCoefficient, 2.0) + math.Pow(orbitCalc.SinalCoefficient, 2.0))
-	boundedAnomaly := math.Round(math.Mod(currentAnomaly, 2.0*math.Pi))
-	ascensionDiffAdjusted := math.Min(math.Abs(orbitCalc.AscensionDiff), 2.0*math.Pi-math.Abs(orbitCalc.AscensionDiff))
 	limitTerm := math.Asin(lengthLimitRatio / orbitalCalcSize)
-	phaseTerm := math.Atan(orbitCalc.CosinalCoefficient / orbitCalc.SinalCoefficient)
-
-	if ascensionDiffAdjusted < math.Pi && boundedAnomaly > math.Pi {
-		phaseTerm += math.Pi
-	}
-
-	if ascensionDiffAdjusted > math.Pi && boundedAnomaly < math.Pi {
-		phaseTerm += math.Pi
-	}
+	phaseTerm := math.Atan2(orbitCalc.CosinalCoefficient, orbitCalc.SinalCoefficient)
 
 	lowerRange := phaseTerm + limitTerm
 	upperRange := math.Pi - limitTerm + phaseTerm
@@ -81,28 +71,24 @@ func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbitalAscen
 	for i := lowerId; i <= upperId; i++ {
 		realAnomaly := float64(i)*anomalyCalc.AnomalyStep + initialPhaseShift + timeStamp*anomalyCalc.MeanMotion
 		realId := (i + anomalyCalc.NumberOfSatellitesPerOrbit) % anomalyCalc.NumberOfSatellitesPerOrbit
-		satellites[realId] = DistanceObject{
-			Anomaly:  realAnomaly,
-			Distance: anomalyCalc.CalculateDistance(orbitCalc, realAnomaly),
-			/*AscensionDiff: orbitCalc.AscensionDiff,
-			A:             float64(limitTerm),
-			B:             float64(phaseTerm),*/
-		}
+		satellites[realId] = anomalyCalc.CalculateDistance(orbitCalc, realAnomaly)
 	}
 
 	return satellites
 }
 
-func (anomalyCalc *AnomalyCalculations) FindSatellitesInRange(Id string, lengthLimitRatio float64, currentAnomaly float64,
-	anomalyEl AnomalyElements, orbitalAscension float64, timeStamp float64) map[string]DistanceObject {
+func (anomalyCalc *AnomalyCalculations) FindSatellitesInRange(Id string, lengthLimitRatio float64, anomalyEl AnomalyElements,
+	orbitalAscension float64, timeStamp float64) map[string]float64 {
 
-	satellitesDistances := make(map[string]DistanceObject)
-	orbitsInRange := anomalyCalc.OrbitalCalculations.FindOrbitsInRange(Id, lengthLimitRatio, currentAnomaly, anomalyEl, orbitalAscension)
+	satellitesDistances := make(map[string]float64)
+	orbitsInRange := anomalyCalc.OrbitalCalculations.FindOrbitsInRange(lengthLimitRatio, anomalyEl, orbitalAscension)
 	for orbit, orbitCalc := range orbitsInRange {
-		satellites := anomalyCalc.calculateSatelliteIdInRange(orbitalAscension, lengthLimitRatio, currentAnomaly, orbitCalc, timeStamp, orbit)
+		satellites := anomalyCalc.calculateSatelliteIdInRange(lengthLimitRatio, orbitCalc, timeStamp, orbit)
 		for id, distance := range satellites {
 			sat_name := fmt.Sprintf("%s-%d-%d", anomalyCalc.ConsellationName, orbit, id)
-			satellitesDistances[sat_name] = distance
+			if Id != sat_name {
+				satellitesDistances[sat_name] = distance
+			}
 		}
 	}
 	return satellitesDistances

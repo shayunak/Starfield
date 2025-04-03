@@ -82,13 +82,13 @@ func (gs *GroundStation) updateSpaceOnDistances() {
 	(*gs.DistanceSpaceChannel) <- UpdateDistancesMessage{
 		DeviceName: gs.Name,
 		TimeStamp:  gs.TimeStamp,
-		Distances: gs.GSCalculation.FindSatellitesInRange(gs.Name, gs.HeadPointAnomaly, gs.HeadPointAscension,
-			gs.HeadPointAnomalyEl, float64(gs.TimeStamp)*0.001),
+		Distances: gs.GSCalculation.FindSatellitesInRange(gs.Name, gs.HeadPointAscension, gs.HeadPointAnomalyEl,
+			float64(gs.TimeStamp)*0.001),
 	}
 }
 
 func startGSDistances(myGS IGroundStation) {
-	for myGS.getTimeStamp() < myGS.getTotalSimulationTime() {
+	for myGS.getTimeStamp() <= myGS.getTotalSimulationTime() {
 		myGS.updateSpaceOnDistances()
 		myGS.nextTimeStep()
 		myGS.updatePosition()

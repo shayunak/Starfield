@@ -31,7 +31,7 @@ type Space struct {
 type UpdateDistancesMessage struct {
 	DeviceName string
 	TimeStamp  int
-	Distances  map[string]helpers.DistanceObject
+	Distances  map[string]float64
 }
 
 type LinkChannelRequest struct {
@@ -75,10 +75,10 @@ func initDistancesChannelCases(selectCases *[]reflect.SelectCase, space ISpace) 
 	}
 }
 
-func deleteDistancesSatellite(space ISpace, index int) {
-	satellites := *space.GetDistancesDeviceChannels()
-	satellites = append(satellites[:index], satellites[index+1:]...)
-	space.SetDistancesDeviceChannels(&satellites)
+func deleteDistancesDevice(space ISpace, index int) {
+	devices := *space.GetDistancesDeviceChannels()
+	devices = append(devices[:index], devices[index+1:]...)
+	space.SetDistancesDeviceChannels(&devices)
 }
 
 func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
@@ -87,7 +87,7 @@ func startDistancesSpace(space ISpace, wg *sync.WaitGroup) {
 		initDistancesChannelCases(&selectSatellitesCases, space)
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
-			deleteDistancesSatellite(space, chosen)
+			deleteDistancesDevice(space, chosen)
 		}
 		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
 		space.addNewDistanceEntries(distanceUpdateMessage)
@@ -108,8 +108,7 @@ func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessag
 			TimeStamp:         distancesMessage.TimeStamp,
 			FirstSatelliteId:  distancesMessage.DeviceName,
 			SecondSatelliteId: satelliteId,
-			Distance:          fmt.Sprintf("%d", int(distance.Distance)),
-			//Distance: fmt.Sprintf("%f, %f, %f, %f, %f", distance.Distance, distance.AscensionDiff, distance.Anomaly, distance.A, distance.B),
+			Distance:          int(distance),
 		})
 	}
 	if space.TimeStamp < distancesMessage.TimeStamp {

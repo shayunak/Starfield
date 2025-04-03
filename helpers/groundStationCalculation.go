@@ -23,7 +23,7 @@ type GroundStationCalculation struct {
 
 type IGroundStationCalculation interface {
 	FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64)
-	FindSatellitesInRange(Id string, headPointAnomaly float64, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]DistanceObject
+	FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]float64
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
 	UpdatePosition(prevAscension float64, timeStep float64) float64
 }
@@ -65,21 +65,15 @@ func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName s
 	return gsc.adjustAngles(anomaly, deltaLongitude, adjustedLongitude)
 }
 
-func (gsc *GroundStationCalculation) FindSatellitesInRange(Id string, headPointAnomaly float64, headPointAscension float64,
-	headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]DistanceObject {
+func (gsc *GroundStationCalculation) FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements,
+	timeStamp float64) map[string]float64 {
 
-	satelliteDistances := gsc.AnomalyCalculations.FindSatellitesInRange(Id, gsc.ElevationLimitRatio, headPointAnomaly,
+	satelliteDistances := gsc.AnomalyCalculations.FindSatellitesInRange(Id, gsc.ElevationLimitRatio,
 		headPointAnomalyEl, headPointAscension, timeStamp)
 
-	for id, distanceObject := range satelliteDistances {
-		updatedDistance := math.Sqrt(math.Pow(gsc.Altitude, 2.0) + gsc.EarthOrbitRatio*math.Pow(distanceObject.Distance, 2.0))
-		newDistanceObject := DistanceObject{
-			Distance: updatedDistance,
-			Anomaly:  distanceObject.Anomaly,
-			/*AscensionDiff: distanceObject.AscensionDiff,
-			A:             distanceObject.A,
-			B:             distanceObject.B,*/
-		}
+	for id, distance := range satelliteDistances {
+		updatedDistance := math.Sqrt(math.Pow(gsc.Altitude, 2.0) + gsc.EarthOrbitRatio*math.Pow(distance, 2.0))
+		newDistanceObject := updatedDistance
 		satelliteDistances[id] = newDistanceObject
 	}
 
