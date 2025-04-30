@@ -38,6 +38,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	anomalyCalc := &helpers.AnomalyCalculations{
 		ConsellationName:           config.ConsellationName,
 		LengthLimitRatio:           1.0 - math.Pow(maxIslLenght/orbitRadius, 2)/2,
+		MaxDistance:                maxIslLenght,
 		NumberOfSatellitesPerOrbit: numberOfSatellitesPerOrbit,
 		AnomalyStep:                anomalyStep * (math.Pi / 180.0),
 		MeanMotion:                 meanMotionRadiansPerSecond,

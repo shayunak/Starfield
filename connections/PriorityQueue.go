@@ -1,13 +1,17 @@
-package helpers
+package connections
 
 import (
 	"container/heap"
-
-	"github.com/shayunak/SatSimGo/connections"
 )
 
+type Event struct {
+	TimeStamp float64
+	Type      int
+	Data      *Packet
+}
+
 type Item struct {
-	Value *connections.Event
+	Value *Event
 	Rank  int
 	Index int
 }
@@ -47,7 +51,7 @@ func (pq *PriorityQueue) Pop() any {
 }
 
 // update modifies the priority and value of an Item in the queue.
-func (pq *PriorityQueue) update(item *Item, event *connections.Event, rank int) {
+func (pq *PriorityQueue) update(item *Item, event *Event, rank int) {
 	item.Value = event
 	item.Rank = rank
 	heap.Fix(pq, item.Index)

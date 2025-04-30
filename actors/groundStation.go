@@ -23,7 +23,7 @@ type GroundStation struct {
 	GSCalculation      helpers.IGroundStationCalculation
 
 	// Packet Level Simulation
-	EventQueue helpers.PriorityQueue
+	EventQueue connections.PriorityQueue
 
 	// Goroutines and connections, and channels
 	GSLInterfaces        connections.INetworkInterface
@@ -120,7 +120,7 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.HeadPointAnomalyEl = headPointAnomalyEl
 
 	// Channels
-	newGS.EventQueue = make(helpers.PriorityQueue, 0)
+	newGS.EventQueue = make(connections.PriorityQueue, 0)
 
 	return &newGS
 }

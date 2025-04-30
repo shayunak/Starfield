@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -21,32 +20,17 @@ type Space struct {
 	TimeStamp           int
 	TotalSimulationTime int // in seconds
 	// Simulation Mode
-	SpaceSatelliteChannels *SpaceSatelliteChannels
-	SatelliteNames         []string
+	SpaceSatelliteChannels      *SpaceSatelliteChannels
+	RemainingUnprocessedPackets int
+	SatelliteNames              []string
+	Events                      helpers.SimulationEntryList
 	// Distances Mode
 	DistancesSpaceChannels *DistanceSpaceDeviceChannels
 	DistanceEntries        helpers.DistanceEntryList
 }
 
-type UpdateDistancesMessage struct {
-	DeviceName string
-	TimeStamp  int
-	Distances  map[string]float64
-}
-
-type LinkChannelRequest struct {
-	SourceId          string
-	DestId            string
-	DestTypeSatellite bool
-	RecieveChannel    *chan connections.Packet
-	SendChannel       *chan connections.Packet
-}
-
 type DistanceSpaceDeviceChannel chan UpdateDistancesMessage
-type SpaceSatelliteChannel chan LinkChannelRequest
-
 type DistanceSpaceDeviceChannels []*DistanceSpaceDeviceChannel
-type SpaceSatelliteChannels []*SpaceSatelliteChannel
 
 type ISpace interface {
 	// Distances Mode
@@ -62,10 +46,24 @@ type ISpace interface {
 	GetNumberOfSatellites() int
 	GetSatelliteChannels() *SpaceSatelliteChannels
 	GetSatelliteNames() []string
-	startNewLink(linkRequest LinkChannelRequest, sourceIndex int)
+	GetRemainingUnprocessedPackets() int
+	ProcessEvent(event SimulationEvent)
+	//startNewLink(linkRequest LinkChannelRequest, sourceIndex int)
 	Run(wg *sync.WaitGroup)
 	// General
 	GetTotalSimulationTime() int
+}
+
+func (space *Space) GetTotalSimulationTime() int {
+	return space.TotalSimulationTime
+}
+
+//////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////
+
+type UpdateDistancesMessage struct {
+	DeviceName string
+	TimeStamp  int
+	Distances  map[string]float64
 }
 
 func initDistancesChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
@@ -102,13 +100,13 @@ func (space *Space) RunDistances(wg *sync.WaitGroup) {
 }
 
 func (space *Space) addNewDistanceEntries(distancesMessage UpdateDistancesMessage) {
-	satellites := distancesMessage.Distances
-	for satelliteId, distance := range satellites {
+	devices := distancesMessage.Distances
+	for deviceId, distance := range devices {
 		space.addNewDistanceEntry(&helpers.DistanceEntry{
-			TimeStamp:         distancesMessage.TimeStamp,
-			FirstSatelliteId:  distancesMessage.DeviceName,
-			SecondSatelliteId: satelliteId,
-			Distance:          int(distance),
+			TimeStamp:  distancesMessage.TimeStamp,
+			FromDevice: distancesMessage.DeviceName,
+			ToDevice:   deviceId,
+			Distance:   int(distance),
 		})
 	}
 	if space.TimeStamp < distancesMessage.TimeStamp {
@@ -153,7 +151,7 @@ func (space *Space) logDistancesSimulationSummary() {
 		log.Fatal(err)
 	}
 
-	rows := helpers.GetRowsFromEvents(&space.DistanceEntries)
+	rows := helpers.GetRowsFromDistanceEntries(&space.DistanceEntries)
 	csvWriter := csv.NewWriter(outputFile)
 
 	if err := csvWriter.WriteAll(rows); err != nil {
@@ -164,6 +162,47 @@ func (space *Space) logDistancesSimulationSummary() {
 }
 
 //////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
+
+type LinkChannelRequest struct {
+	SourceId          string
+	DestId            string
+	DestTypeSatellite bool
+	RecieveChannel    *chan connections.Packet
+	SendChannel       *chan connections.Packet
+}
+
+const SIMULATION_EVENT_SENT int = 0
+const SIMULATION_EVENT_RECEIVED int = 1
+const SIMULATION_EVENT_DROPPED int = 2
+const SIMULATION_EVENT_CONNECTION_LOST int = 3
+const SIMULATION_EVENT_CONNECTION_ESTABLISHED int = 4
+
+type SimulationEvent struct {
+	TimeStamp     int
+	EventType     int
+	FromSatellite string
+	ToSatellite   string
+	Packet        *connections.Packet
+}
+
+type SpaceSatelliteChannels []*SpaceSatelliteChannel
+type SpaceSatelliteChannel chan SimulationEvent
+
+func (space *Space) GetNumberOfSatellites() int {
+	return len(*space.SpaceSatelliteChannels)
+}
+
+func (space *Space) GetSatelliteNames() []string {
+	return space.SatelliteNames
+}
+
+func (space *Space) GetSatelliteChannels() *SpaceSatelliteChannels {
+	return space.SpaceSatelliteChannels
+}
+
+func (space *Space) GetRemainingUnprocessedPackets() int {
+	return space.RemainingUnprocessedPackets
+}
 
 func initChannelCases(selectCases *[]reflect.SelectCase, space ISpace) {
 	channels := *space.GetSatelliteChannels()
@@ -180,6 +219,41 @@ func deleteSatellite(space ISpace, index int) {
 	space.SetSatelliteChannels(&satellites, names)
 }
 
+func (space *Space) ProcessEvent(event SimulationEvent) {
+	eventType := helpers.EVENT_SENT
+	packetId := -1
+	switch event.EventType {
+	case SIMULATION_EVENT_SENT:
+		packetId = event.Packet.PacketId
+	case SIMULATION_EVENT_RECEIVED:
+		eventType = helpers.EVENT_RECEIVED
+		packetId = event.Packet.PacketId
+		if event.Packet.Destination == event.ToSatellite {
+			space.RemainingUnprocessedPackets -= 1
+		}
+	case SIMULATION_EVENT_DROPPED:
+		eventType = helpers.EVENT_DROPPED
+		packetId = event.Packet.PacketId
+		space.RemainingUnprocessedPackets -= 1
+	case SIMULATION_EVENT_CONNECTION_LOST:
+		eventType = helpers.EVENT_CONNECTION_LOST
+	case SIMULATION_EVENT_CONNECTION_ESTABLISHED:
+		eventType = helpers.EVENT_CONNECTION_ESTABLISHED
+	}
+
+	newEvent := helpers.SimulationEntry{
+		TimeStamp:  event.TimeStamp,
+		EventType:  eventType,
+		FromDevice: event.FromSatellite,
+		ToDevice:   event.ToSatellite,
+		PacketId:   packetId,
+	}
+	space.Events = append(space.Events, &newEvent)
+}
+
+/*
+Link request is not working right now, since the channel cannot handle two types of strctural messages.
+
 func (space *Space) startNewLink(linkRequest LinkChannelRequest, sourceIndex int) {
 	satelliteNames := space.GetSatelliteNames()
 	satellites := *space.GetSatelliteChannels()
@@ -191,19 +265,48 @@ func (space *Space) startNewLink(linkRequest LinkChannelRequest, sourceIndex int
 		*satellites[destIndex] <- linkRequest
 	}
 }
+*/
 
 func startSpace(space ISpace, wg *sync.WaitGroup) {
-	for space.GetNumberOfSatellites() > 0 {
+	for space.GetRemainingUnprocessedPackets() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfSatellites())
 		initChannelCases(&selectSatellitesCases, space)
-		chosen, value, ok := reflect.Select(selectSatellitesCases)
-		if !ok {
-			deleteSatellite(space, chosen)
-		}
-		newLinkRequest := value.Interface().(LinkChannelRequest)
-		space.startNewLink(newLinkRequest, chosen)
+		_, value, _ := reflect.Select(selectSatellitesCases)
+		simulationEvent := value.Interface().(SimulationEvent)
+		space.ProcessEvent(simulationEvent)
 	}
 	wg.Done()
+}
+
+func (space *Space) logSimulationSummary() {
+	sort.SliceStable(space.Events, func(i, j int) bool {
+		return space.Events[i].GetTimeStamp() < space.DistanceEntries[j].GetTimeStamp()
+	}) // Sorting events by timestamp
+
+	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
+		err := os.Mkdir("./generated", 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fileName := fmt.Sprintf("./generated/SimulationSummary#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		space.ConsellationName, space.TimeStep, space.TotalSimulationTime)
+
+	log.Default().Println("Writing simulation summary to ", fileName)
+	outputFile, err := os.Create(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rows := helpers.GetRowsFromDistanceEntries(&space.DistanceEntries)
+	csvWriter := csv.NewWriter(outputFile)
+
+	if err := csvWriter.WriteAll(rows); err != nil {
+		log.Fatal(err)
+	}
+
+	outputFile.Close()
 }
 
 func (space *Space) Run(wg *sync.WaitGroup) {
@@ -211,23 +314,7 @@ func (space *Space) Run(wg *sync.WaitGroup) {
 	go startSpace(space, wg)
 }
 
-func (space *Space) GetTotalSimulationTime() int {
-	return space.TotalSimulationTime
-}
-
 func (space *Space) SetSatelliteChannels(channels *SpaceSatelliteChannels, satelliteNames []string) {
 	space.SpaceSatelliteChannels = channels
 	space.SatelliteNames = satelliteNames
-}
-
-func (space *Space) GetNumberOfSatellites() int {
-	return len(*space.SpaceSatelliteChannels)
-}
-
-func (space *Space) GetSatelliteNames() []string {
-	return space.SatelliteNames
-}
-
-func (space *Space) GetSatelliteChannels() *SpaceSatelliteChannels {
-	return space.SpaceSatelliteChannels
 }

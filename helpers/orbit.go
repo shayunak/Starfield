@@ -3,6 +3,8 @@ package helpers
 import (
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 )
 
 type GroundStationEntry struct {
@@ -118,4 +120,12 @@ func (orbit *Orbit) GetCoveringGroundStations(timeStamp float64, anomaly float64
 		}
 	}
 	return distances
+}
+
+func GetOrbitAndSatelliteId(satelliteName string) (int, int) {
+	splitted := strings.Split(satelliteName, "-")
+	orbit, _ := strconv.Atoi(splitted[1])
+	id, _ := strconv.Atoi(splitted[2])
+
+	return orbit, id
 }

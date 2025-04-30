@@ -3,29 +3,19 @@ package routing
 import (
 	"math"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
-func getOrbitAndSatelliteId(satelliteName string) (int, int) {
-	splitted := strings.Split(satelliteName, "-")
-	orbit, _ := strconv.Atoi(splitted[1])
-	id, _ := strconv.Atoi(splitted[2])
-
-	return orbit, id
-}
-
 func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp int, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) int {
 	distances := make([]float64, len(interfaces))
-	nextBestHopOrbit, nextBestHopId := getOrbitAndSatelliteId(nextBestHop)
+	nextBestHopOrbit, nextBestHopId := helpers.GetOrbitAndSatelliteId(nextBestHop)
 
 	for i := 0; i < len(interfaces); i++ {
 		if interfaces[i] == "" {
 			distances[i] = math.Inf(1)
 		} else {
-			interfaceOrbit, interfaceId := getOrbitAndSatelliteId(interfaces[i])
+			interfaceOrbit, interfaceId := helpers.GetOrbitAndSatelliteId(interfaces[i])
 			distances[i] = anomalyCalculation.CalculateDistanceBySatelliteId(nextBestHopId, nextBestHopOrbit, interfaceId, interfaceOrbit, 0.001*float64(timeStamp))
 		}
 	}

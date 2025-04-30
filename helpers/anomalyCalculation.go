@@ -24,6 +24,7 @@ type IAnomalyCalculation interface {
 	CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int, secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64
 	GetOrbitalCalculations() IOrbitalCalculations
 	GetLengthLimitRatio() float64
+	GetMaxDistance() float64
 	calculateSatelliteIdInRange(lengthLimitRatio float64, orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]float64
 	CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64
 	calculatePhase(satelliteId int, orbitId int) float64
@@ -32,6 +33,7 @@ type IAnomalyCalculation interface {
 type AnomalyCalculations struct {
 	ConsellationName           string
 	LengthLimitRatio           float64
+	MaxDistance                float64
 	NumberOfSatellitesPerOrbit int
 	AnomalyStep                float64 // in radians
 	MeanMotion                 float64 // in radians per second
@@ -142,4 +144,8 @@ func (anomalyCalc *AnomalyCalculations) GetOrbitalCalculations() IOrbitalCalcula
 
 func (anomalyCalc *AnomalyCalculations) GetLengthLimitRatio() float64 {
 	return anomalyCalc.LengthLimitRatio
+}
+
+func (anomalyCalc *AnomalyCalculations) GetMaxDistance() float64 {
+	return anomalyCalc.MaxDistance
 }

@@ -1,5 +1,9 @@
 package connections
 
+import (
+	"github.com/shayunak/SatSimGo/helpers"
+)
+
 type Pair struct {
 	Id              int    // pair id
 	FirstSatellite  string // sending satellite
@@ -13,27 +17,25 @@ type InterfaceEntry struct {
 	ReceiveChannel  *chan Packet
 }
 
-type Event struct {
-	TimeStamp float64
-	Type      int
-	Data      *Packet
-}
-
 const SEND_EVENT int = 0
 const RECEIVE_EVENT int = 1
 
 type NetworkInterface struct {
+	/* Chance to buffer packets if the link is down*/
 	InterfaceId        int
+	InterfaceOwner     string
+	IsLinkDown         bool
 	SendChannel        *chan Packet
 	ReceiveChannel     *chan Packet
 	Link               ILink
 	DeviceConnectedTo  string
 	LastPacketSentTime float64
+	GeoCalculation     helpers.IAnomalyCalculation
 }
 
 type INetworkInterface interface {
-	Send(packet Packet, timeOfEvent float64)
-	Receive(maxTimeStamp float64) []Event
+	Send(packet Packet, timeOfEvent float64) (bool, int)
+	Receive() []Event
 	GetDeviceConnectedTo() string
 	GetLink() ILink
 	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
@@ -46,16 +48,36 @@ type ILink interface {
 	UpdateLink(distance float64)
 }
 
-func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) {
+func (networkInterface *NetworkInterface) updateLink(timeStamp float64) {
+	ownerOrbit, ownerId := helpers.GetOrbitAndSatelliteId(networkInterface.InterfaceOwner)
+	connectedOrbit, connectedId := helpers.GetOrbitAndSatelliteId(networkInterface.DeviceConnectedTo)
+	updatedDistance := networkInterface.GeoCalculation.CalculateDistanceBySatelliteId(ownerId, ownerOrbit, connectedId, connectedOrbit, float64(timeStamp))
+	if updatedDistance > networkInterface.GeoCalculation.GetMaxDistance() {
+		networkInterface.IsLinkDown = true
+	} else {
+		networkInterface.IsLinkDown = false
+	}
+	networkInterface.Link.UpdateLink(updatedDistance)
+}
+
+func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, int) {
 	networkInterface.LastPacketSentTime = max(timeOfEvent, networkInterface.LastPacketSentTime)
 	packet.PacketSentTime = networkInterface.LastPacketSentTime
+	networkInterface.updateLink(0.001 * networkInterface.LastPacketSentTime)
+
+	if networkInterface.IsLinkDown || len(*networkInterface.SendChannel) >= cap(*networkInterface.SendChannel) {
+		return false, int(packet.PacketSentTime)
+	}
+
 	transmissionTime := networkInterface.Link.CalculateTransmissionTime(packet)
 	select {
 	case *networkInterface.SendChannel <- packet:
 		networkInterface.LastPacketSentTime += transmissionTime
 	default:
-		networkInterface.LastPacketSentTime += transmissionTime
+		return false, int(packet.PacketSentTime)
 	}
+
+	return true, int(packet.PacketSentTime)
 }
 
 func (networkInterface *NetworkInterface) CloseConnection() {
@@ -65,11 +87,11 @@ func (networkInterface *NetworkInterface) CloseConnection() {
 	networkInterface.ReceiveChannel = nil
 }
 
-func (networkInterface *NetworkInterface) Receive(maxTimeStamp float64) []Event {
+func (networkInterface *NetworkInterface) Receive() []Event {
 	recievedEvents := make([]Event, 0)
 	lastTimeStampRead := 0.0
 	channelEmpty := false
-	for lastTimeStampRead <= maxTimeStamp && !channelEmpty {
+	for !channelEmpty {
 		select {
 		case packet, ok := <-*networkInterface.ReceiveChannel:
 			if !ok {
@@ -77,6 +99,7 @@ func (networkInterface *NetworkInterface) Receive(maxTimeStamp float64) []Event 
 				networkInterface.CloseConnection()
 				break
 			}
+			networkInterface.updateLink(0.001 * packet.PacketSentTime)
 			lastTimeStampRead = packet.PacketSentTime + networkInterface.Link.CalculateDeliveryTime(packet)
 			event := Event{
 				TimeStamp: lastTimeStampRead,

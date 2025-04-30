@@ -1,6 +1,10 @@
 package connections
 
-import "math"
+import (
+	"math"
+
+	"github.com/shayunak/SatSimGo/helpers"
+)
 
 type ISL struct {
 	SpeedOfLightVAC  float64
@@ -24,16 +28,20 @@ func (isl *ISL) CalculateTransmissionTime(packet Packet) float64 {
 	return float64(packet.Length) / isl.Bitrate
 }
 
-func InitISLs(numberOfIsls int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64) []INetworkInterface {
+func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
+	anomalyCalculations helpers.IAnomalyCalculation) []INetworkInterface {
 	islList := make([]INetworkInterface, numberOfIsls)
 	for i := 0; i < numberOfIsls; i++ {
 		islList[i] = &NetworkInterface{
 			InterfaceId:        i,
+			InterfaceOwner:     ownerSatellite,
+			IsLinkDown:         false,
 			SendChannel:        nil,
 			ReceiveChannel:     nil,
 			Link:               &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef},
 			DeviceConnectedTo:  "",
 			LastPacketSentTime: 0,
+			GeoCalculation:     anomalyCalculations,
 		}
 	}
 	return islList

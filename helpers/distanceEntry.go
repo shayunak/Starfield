@@ -7,10 +7,10 @@ import (
 type DistanceEntryList []IDistanceEntry
 
 type DistanceEntry struct {
-	TimeStamp         int
-	FirstSatelliteId  string
-	SecondSatelliteId string
-	Distance          int
+	TimeStamp  int
+	FromDevice string
+	ToDevice   string
+	Distance   int
 }
 
 type IDistanceEntry interface {
@@ -30,19 +30,19 @@ func (entry *DistanceEntry) getHeaders() []string {
 func (entry *DistanceEntry) toSlice() []string {
 	return []string{
 		fmt.Sprintf("%d", entry.TimeStamp),
-		entry.FirstSatelliteId,
-		entry.SecondSatelliteId,
+		entry.FromDevice,
+		entry.ToDevice,
 		fmt.Sprintf("%d", entry.Distance),
 	}
 }
 
-func GetRowsFromEvents(entries *DistanceEntryList) [][]string {
+func GetRowsFromDistanceEntries(entries *DistanceEntryList) [][]string {
 	var rows [][]string
-	for i, event := range *entries {
+	for i, entry := range *entries {
 		if i == 0 {
-			rows = append(rows, event.getHeaders())
+			rows = append(rows, entry.getHeaders())
 		}
-		rows = append(rows, event.toSlice())
+		rows = append(rows, entry.toSlice())
 	}
 	return rows
 }
