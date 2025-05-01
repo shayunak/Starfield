@@ -1,11 +1,19 @@
 package actors
 
 import (
+	"container/heap"
 	"log"
+	"math"
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
 )
+
+type TrafficEntry struct {
+	Destination string
+	TimeStamp   int     // in milliseconds
+	Length      float64 // in Mb
+}
 
 type GroundStation struct {
 	// General
@@ -32,15 +40,20 @@ type GroundStation struct {
 }
 
 type IGroundStation interface {
-	Run()
-	RunDistances()
 	getTimeStamp() int
 	getTotalSimulationTime() int
+	GetName() string
+	// Distance Mode
+	RunDistances()
 	nextTimeStep()
 	updatePosition()
 	updateSpaceOnDistances()
 	SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel)
 	GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel
+	// Simulation Mode
+	Run()
+	generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet
+	GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64)
 }
 
 func (gs *GroundStation) RunDistances() {
@@ -51,6 +64,10 @@ func (gs *GroundStation) RunDistances() {
 func (gs *GroundStation) Run() {
 	log.Default().Println("Running ground station: ", gs.Name)
 	go startGS(gs)
+}
+
+func (gs *GroundStation) GetName() string {
+	return gs.Name
 }
 
 func (gs *GroundStation) getTimeStamp() int {
@@ -123,4 +140,41 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.EventQueue = make(connections.PriorityQueue, 0)
 
 	return &newGS
+}
+
+//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
+
+func (gs *GroundStation) generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet {
+	numberOfFullPackets := int(math.Ceil(1000 * entry.Length / maxPacketSize))
+	packets := make([]connections.Packet, numberOfFullPackets)
+
+	for i := 0; i < numberOfFullPackets; i++ {
+		packets[i] = connections.Packet{
+			Source:         gs.Name,
+			Destination:    entry.Destination,
+			Length:         maxPacketSize,
+			PacketSentTime: float64(entry.TimeStamp),
+		}
+	}
+	return packets
+}
+
+func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) {
+	for _, entry := range traffic {
+		packets := gs.generatePackets(maxPacketSize, entry)
+		for index, packet := range packets {
+			event := connections.Event{
+				TimeStamp: float64(entry.TimeStamp),
+				Type:      connections.SEND_EVENT,
+				Data:      &packet,
+			}
+			item := connections.Item{
+				Value: &event,
+				Rank:  entry.TimeStamp,
+				Index: index,
+			}
+			gs.EventQueue = append(gs.EventQueue, &item)
+		}
+	}
+	heap.Init(&gs.EventQueue)
 }

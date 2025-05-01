@@ -25,7 +25,7 @@ func (isl *ISL) UpdateLink(distance float64) {
 }
 
 func (isl *ISL) CalculateTransmissionTime(packet Packet) float64 {
-	return float64(packet.Length) / isl.Bitrate
+	return packet.Length / isl.Bitrate
 }
 
 func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,

@@ -37,6 +37,7 @@ type INetworkInterface interface {
 	Send(packet Packet, timeOfEvent float64) (bool, int)
 	Receive() []Event
 	GetDeviceConnectedTo() string
+	GetLinkStatus() bool
 	GetLink() ILink
 	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
 	CloseConnection()
@@ -118,6 +119,10 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 
 func (networkInterface *NetworkInterface) GetDeviceConnectedTo() string {
 	return networkInterface.DeviceConnectedTo
+}
+
+func (networkInterface *NetworkInterface) GetLinkStatus() bool {
+	return networkInterface.IsLinkDown
 }
 
 func (networkInterface *NetworkInterface) ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet) {

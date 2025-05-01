@@ -31,7 +31,7 @@ type SatelliteConfig struct {
 	ISLLinkNoiseCoef    float64 `json:"isl_link_noise_coef"`   // in km^2
 	ISLAcquisitionTime  float64 `json:"isl_acquisition_time"`  // in seconds
 	SpeedOfLightVac     float64 `json:"speed_of_light_vac"`    // in meters per second
-	MaxPacketSize       int     `json:"max_packet_size"`       // in Mb
+	MaxPacketSize       float64 `json:"max_packet_size"`       // in Kb
 	InterfaceBufferSize int     `json:"interface_buffer_size"` // number of Packets
 }
 

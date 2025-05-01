@@ -122,7 +122,7 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
 
 	// reading the traffic file
-	loadTrafficOnNodes(trafficFile, &satellites, config.SatelliteConfig.MaxPacketSize)
+	loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {

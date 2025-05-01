@@ -28,7 +28,7 @@ func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficE
 		source := record[0]
 		destination := record[1]
 		timeStamp, _ := strconv.Atoi(record[2])
-		length, _ := strconv.Atoi(record[3])
+		length, _ := strconv.ParseFloat(record[3], 64)
 		trafficEntry := actors.TrafficEntry{
 			Destination: destination,
 			TimeStamp:   timeStamp,
@@ -40,10 +40,10 @@ func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficE
 	return trafficMatrix
 }
 
-func loadTrafficOnNodes(generatorFile string, satellites *SatelliteList, maxPacketSize int) {
+func loadTrafficOnNodes(generatorFile string, groundStations *GroundStationList, maxPacketSize float64) {
 	trafficMatrix := readTrafficGeneratorFile(generatorFile)
 
-	for _, satellite := range *satellites {
-		satellite.GenerateTraffic(trafficMatrix[satellite.GetName()], maxPacketSize)
+	for _, gs := range *groundStations {
+		gs.GenerateTraffic(trafficMatrix[gs.GetName()], maxPacketSize)
 	}
 }

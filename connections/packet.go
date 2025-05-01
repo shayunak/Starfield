@@ -4,6 +4,6 @@ type Packet struct {
 	PacketId       int
 	Source         string
 	Destination    string
-	Length         int
+	Length         float64
 	PacketSentTime float64
 }
