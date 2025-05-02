@@ -8,26 +8,38 @@ import (
 	"github.com/shayunak/SatSimGo/actors"
 )
 
-func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficEntry {
-	trafficMatrix := make(map[string][]actors.TrafficEntry)
-
-	file, err := os.Open(generatorFile)
-
+func openTrafficGeneratorFile(fileName string) (*os.File, *csv.Reader) {
+	trafficGeneratorFilePath := "./input/" + fileName
+	file, err := os.Open(trafficGeneratorFilePath)
 	if err != nil {
 		panic(err)
 	}
 
-	defer file.Close()
+	csvReader := csv.NewReader(file)
 
-	reader := csv.NewReader(file)
+	_, err = csvReader.Read()
+	if err != nil {
+		panic(err)
+	}
+
+	return file, csvReader
+}
+
+// Generator file format: Timestamp, Source, Destination, Length
+func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficEntry {
+	trafficMatrix := make(map[string][]actors.TrafficEntry)
+
+	file, reader := openTrafficGeneratorFile(generatorFile)
+
+	defer file.Close()
 
 	// read the data
 	records, _ := reader.ReadAll()
 
 	for _, record := range records {
-		source := record[0]
-		destination := record[1]
-		timeStamp, _ := strconv.Atoi(record[2])
+		timeStamp, _ := strconv.Atoi(record[0])
+		source := record[1]
+		destination := record[2]
 		length, _ := strconv.ParseFloat(record[3], 64)
 		trafficEntry := actors.TrafficEntry{
 			Destination: destination,
@@ -40,10 +52,16 @@ func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficE
 	return trafficMatrix
 }
 
-func loadTrafficOnNodes(generatorFile string, groundStations *GroundStationList, maxPacketSize float64) {
+func loadTrafficOnNodes(generatorFile string, groundStations *GroundStationList, maxPacketSize float64) int {
 	trafficMatrix := readTrafficGeneratorFile(generatorFile)
+	totalNumberOfPackets := 0
 
 	for _, gs := range *groundStations {
-		gs.GenerateTraffic(trafficMatrix[gs.GetName()], maxPacketSize)
+		sourceEntry, isPresent := trafficMatrix[gs.GetName()]
+		if isPresent {
+			totalNumberOfPackets += gs.GenerateTraffic(sourceEntry, maxPacketSize)
+		}
 	}
+
+	return totalNumberOfPackets
 }

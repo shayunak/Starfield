@@ -53,7 +53,7 @@ type IGroundStation interface {
 	// Simulation Mode
 	Run()
 	generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet
-	GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64)
+	GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) int
 }
 
 func (gs *GroundStation) RunDistances() {
@@ -159,9 +159,11 @@ func (gs *GroundStation) generatePackets(maxPacketSize float64, entry TrafficEnt
 	return packets
 }
 
-func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) {
+func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) int {
+	number_of_packets := 0
 	for _, entry := range traffic {
 		packets := gs.generatePackets(maxPacketSize, entry)
+		number_of_packets = len(packets)
 		for index, packet := range packets {
 			event := connections.Event{
 				TimeStamp: float64(entry.TimeStamp),
@@ -177,4 +179,6 @@ func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize f
 		}
 	}
 	heap.Init(&gs.EventQueue)
+
+	return number_of_packets
 }

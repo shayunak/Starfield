@@ -59,16 +59,17 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	return anomalyCalc, groundCalc
 }
 
-func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int) {
+func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) {
 	*space = &actors.Space{
-		TotalSimulationTime:    totalSimulationTime,
-		SpaceSatelliteChannels: nil,
-		DistancesSpaceChannels: nil,
-		SatelliteNames:         nil,
-		DistanceEntries:        make(helpers.DistanceEntryList, 0),
-		ConsellationName:       config.ConsellationName,
-		TimeStep:               timeStep,
-		TimeStamp:              0,
+		TotalSimulationTime:         totalSimulationTime,
+		SpaceSatelliteChannels:      nil,
+		DistancesSpaceChannels:      nil,
+		SatelliteNames:              nil,
+		DistanceEntries:             make(helpers.DistanceEntryList, 0),
+		ConsellationName:            config.ConsellationName,
+		RemainingUnprocessedPackets: totalNumberOfPackets,
+		TimeStep:                    timeStep,
+		TimeStamp:                   0,
 	}
 }
 
@@ -92,7 +93,7 @@ func SetupSimulatorDistances(configFileName string, groundStationFileName string
 	anomalyCalc, groundCalc := initCalculators(config)
 
 	// initializing the actors
-	initSpace(&space, config, timeStep, totalSimulationTime)
+	initSpace(&space, config, timeStep, totalSimulationTime, 0)
 	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
 	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
 
@@ -104,7 +105,7 @@ func SetupSimulatorDistances(configFileName string, groundStationFileName string
 	space.RunDistances(simulationDone)
 }
 
-func SetupForwardingSimulation(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string, timeStep int,
+func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string, timeStep int,
 	totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var groundStations GroundStationList
@@ -117,20 +118,62 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	anomalyCalc, groundCalc := initCalculators(config)
 
 	// initializing the actors
-	initSpace(&space, config, timeStep, totalSimulationTime)
 	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
 	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
 
 	// reading the traffic file
-	loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
+	totalNumberOfPackets := loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {
 		satellite.SetForwardingFile(forwardingFolder)
 	}
 
+	// initializing the space
+	initSpace(&space, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+
 	// bringing up the ISL topology
 	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
+	topologyList := connections.GetTopologyList(topologyPairs, config.SatelliteConfig.InterfaceBufferSize)
+
+	// adding topology data to satellites
+	initTopology(satellites, topologyList)
+
+	// starting the actors
+	channels, satelliteNames := startSatellites(satellites)
+	space.SetSatelliteChannels(&channels, satelliteNames)
+	space.Run(simulationDone)
+}
+
+func SetupForwardingSimulation(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string,
+	ISLTopologyFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
+	var satellites SatelliteList
+	var groundStations GroundStationList
+	var space actors.ISpace
+
+	// reading the config file
+	config := getConfig(configFileName)
+
+	// initializing the calculators
+	anomalyCalc, groundCalc := initCalculators(config)
+
+	// initializing the actors
+	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
+
+	// reading the traffic file
+	totalNumberOfPackets := loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
+
+	// adding forwarding file data to satellites
+	for _, satellite := range satellites {
+		satellite.SetForwardingFile(forwardingFolder)
+	}
+
+	// initializing the space
+	initSpace(&space, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+
+	// bringing up the ISL topology
+	topologyPairs := connections.GenerateISLTopology(ISLTopologyFileName)
 	topologyList := connections.GetTopologyList(topologyPairs, config.SatelliteConfig.InterfaceBufferSize)
 
 	// adding topology data to satellites
