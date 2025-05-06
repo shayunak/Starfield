@@ -31,7 +31,8 @@ type GroundStation struct {
 	GSCalculation      helpers.IGroundStationCalculation
 
 	// Packet Level Simulation
-	EventQueue connections.PriorityQueue
+	ForwardingTable map[int]ForwardingEntry
+	EventQueue      connections.PriorityQueue
 
 	// Goroutines and connections, and channels
 	GSLInterfaces        connections.INetworkInterface
@@ -52,18 +53,9 @@ type IGroundStation interface {
 	GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel
 	// Simulation Mode
 	Run()
-	generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet
+	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) int
-}
-
-func (gs *GroundStation) RunDistances() {
-	log.Default().Println("Running ground station (Distance Mode): ", gs.Name)
-	go startGSDistances(gs)
-}
-
-func (gs *GroundStation) Run() {
-	log.Default().Println("Running ground station: ", gs.Name)
-	go startGS(gs)
+	generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet
 }
 
 func (gs *GroundStation) GetName() string {
@@ -76,6 +68,38 @@ func (gs *GroundStation) getTimeStamp() int {
 
 func (gs *GroundStation) getTotalSimulationTime() int {
 	return gs.TotalSimulationTime
+}
+
+func NewGroundStation(name string, latitude float64, longitude float64, dt int, totalSimulationTime int,
+	headPointAnomaly float64, headPointAscension float64, groundStationCalculation helpers.IGroundStationCalculation,
+	headPointAnomalyEl helpers.AnomalyElements) IGroundStation {
+
+	var newGS GroundStation
+
+	newGS.Name = name
+	newGS.Dt = dt
+	newGS.TotalSimulationTime = totalSimulationTime
+	newGS.TimeStamp = 0
+
+	// Geo
+	newGS.Latitude = latitude
+	newGS.Longitude = longitude
+	newGS.GSCalculation = groundStationCalculation
+	newGS.HeadPointAnomaly = headPointAnomaly
+	newGS.HeadPointAscension = headPointAscension
+	newGS.HeadPointAnomalyEl = headPointAnomalyEl
+
+	// Channels
+	newGS.EventQueue = make(connections.PriorityQueue, 0)
+
+	return &newGS
+}
+
+//////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////
+
+func (gs *GroundStation) RunDistances() {
+	log.Default().Println("Running ground station (Distance Mode): ", gs.Name)
+	go startGSDistances(gs)
 }
 
 func (gs *GroundStation) SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel) {
@@ -113,36 +137,20 @@ func startGSDistances(myGS IGroundStation) {
 	close(*myGS.GetDistanceSpaceChannel())
 }
 
+//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
+
+func (gs *GroundStation) SetForwardingTable(forwardingTable map[int]ForwardingEntry) {
+	gs.ForwardingTable = forwardingTable
+}
+
+func (gs *GroundStation) Run() {
+	log.Default().Println("Running ground station: ", gs.Name)
+	go startGS(gs)
+}
+
 func startGS(myGS IGroundStation) {
 
 }
-
-func NewGroundStation(name string, latitude float64, longitude float64, dt int, totalSimulationTime int,
-	headPointAnomaly float64, headPointAscension float64, groundStationCalculation helpers.IGroundStationCalculation,
-	headPointAnomalyEl helpers.AnomalyElements) IGroundStation {
-
-	var newGS GroundStation
-
-	newGS.Name = name
-	newGS.Dt = dt
-	newGS.TotalSimulationTime = totalSimulationTime
-	newGS.TimeStamp = 0
-
-	// Geo
-	newGS.Latitude = latitude
-	newGS.Longitude = longitude
-	newGS.GSCalculation = groundStationCalculation
-	newGS.HeadPointAnomaly = headPointAnomaly
-	newGS.HeadPointAscension = headPointAscension
-	newGS.HeadPointAnomalyEl = headPointAnomalyEl
-
-	// Channels
-	newGS.EventQueue = make(connections.PriorityQueue, 0)
-
-	return &newGS
-}
-
-//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
 
 func (gs *GroundStation) generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet {
 	numberOfFullPackets := int(math.Ceil(1000 * entry.Length / maxPacketSize))

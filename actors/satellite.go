@@ -2,12 +2,9 @@ package actors
 
 import (
 	"container/heap"
-	"encoding/csv"
 	"fmt"
 	"log"
 	"math"
-	"os"
-	"strconv"
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
@@ -32,7 +29,6 @@ type Satellite struct {
 	AnomalyCalculations helpers.IAnomalyCalculation
 
 	// Packet Level Simulation
-	ForwardingFile  string
 	ForwardingTable map[int]ForwardingEntry
 	EventQueue      connections.PriorityQueue
 
@@ -63,14 +59,13 @@ type ISatellite interface {
 	Run()
 	GetSpaceChannel() *SpaceSatelliteChannel
 	SetSpaceChannel(channel *SpaceSatelliteChannel)
-	SetForwardingFile(folder string)
+	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	ReceiveFromInterfaces()
 	SendPackets()
 	findAvailableISLInterfaceId() int
 	getISLInterfaceNames() []string
-	loadForwardingTableInMemory()
 	sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 }
 
@@ -173,8 +168,8 @@ func startSatelliteDistances(mySatellite ISatellite) {
 
 //////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
 
-func (satellite *Satellite) SetForwardingFile(folder string) {
-	satellite.ForwardingFile = fmt.Sprintf("./forwarding_table/%s/%s.csv", folder, satellite.Name)
+func (satellite *Satellite) SetForwardingTable(forwardingTable map[int]ForwardingEntry) {
+	satellite.ForwardingTable = forwardingTable
 }
 
 func (satellite *Satellite) GetSpaceChannel() *SpaceSatelliteChannel {
@@ -258,40 +253,10 @@ func (satellite *Satellite) Run() {
 	go startSatellite(satellite)
 }
 
-func (satellite *Satellite) loadForwardingTableInMemory() {
-	satellite.ForwardingTable = make(map[int]ForwardingEntry)
-
-	file, err := os.Open(satellite.ForwardingFile)
-
-	if err != nil {
-		panic(err)
-	}
-
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-
-	// ignore the header
-	_, _ = reader.Read()
-	// read the data
-	records, _ := reader.ReadAll()
-
-	for _, record := range records {
-		timeStamp, _ := strconv.Atoi(record[0])
-		if satellite.ForwardingTable[timeStamp] == nil {
-			satellite.ForwardingTable[timeStamp] = make(ForwardingEntry)
-		}
-		satellite.ForwardingTable[timeStamp][record[1]] = record[2]
-	}
-}
-
 func startSatellite(mySatellite ISatellite) {
-	mySatellite.loadForwardingTableInMemory()
-	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
+	for {
 		mySatellite.ReceiveFromInterfaces()
 		mySatellite.SendPackets()
-		mySatellite.nextTimeStep()
-		mySatellite.updatePosition()
 	}
 }
 

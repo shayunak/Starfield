@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
@@ -126,7 +127,14 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {
-		satellite.SetForwardingFile(forwardingFolder)
+		satelliteForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, satellite.GetName())
+		satellite.SetForwardingTable(LoadForwardingTableInMemory(satelliteForwardingFileName))
+	}
+
+	// adding forwarding file data to ground stations
+	for _, gs := range groundStations {
+		groundStationForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, gs.GetName())
+		gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
 	}
 
 	// initializing the space
@@ -166,7 +174,14 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 
 	// adding forwarding file data to satellites
 	for _, satellite := range satellites {
-		satellite.SetForwardingFile(forwardingFolder)
+		satelliteForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, satellite.GetName())
+		satellite.SetForwardingTable(LoadForwardingTableInMemory(satelliteForwardingFileName))
+	}
+
+	// adding forwarding file data to ground stations
+	for _, gs := range groundStations {
+		groundStationForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, gs.GetName())
+		gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
 	}
 
 	// initializing the space
