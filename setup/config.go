@@ -24,12 +24,13 @@ type OrbitConfig struct {
 type SatelliteConfig struct {
 	MeanMotionRevPerDay float64 `json:"mean_motion_rev_per_day"` // in number of revolutions per day
 	ConeRadius          float64 `json:"cone_radius"`             // in meters
-	MinElevationAngle   float64 `json:"min_elevation_angle"`
+	MinElevationAngle   float64 `json:"min_elevation_angle"`     // in degrees
 	NumberOfISLs        int     `json:"number_of_isls"`
-	NumberOfGSLs        int     `json:"number of GSLs"`
 	ISLBandwidth        float64 `json:"isl_bandwidth"`         // in Mbps
 	ISLLinkNoiseCoef    float64 `json:"isl_link_noise_coef"`   // in km^2
 	ISLAcquisitionTime  float64 `json:"isl_acquisition_time"`  // in seconds
+	GSLBandwidth        float64 `json:"gsl_bandwidth"`         // in Mbps
+	GSLLinkNoiseCoef    float64 `json:"gsl_link_noise_coef"`   // in km^2
 	SpeedOfLightVac     float64 `json:"speed_of_light_vac"`    // in meters per second
 	MaxPacketSize       float64 `json:"max_packet_size"`       // in Kb
 	InterfaceBufferSize int     `json:"interface_buffer_size"` // number of Packets
@@ -58,8 +59,12 @@ func (orbitConfig OrbitConfig) toString() string {
 }
 
 func (satelliteConfig SatelliteConfig) toString() string {
-	return fmt.Sprintf("{ \n mean_motion_rev_per_day: %v, \n cone_radius: %v \n}",
-		satelliteConfig.MeanMotionRevPerDay, satelliteConfig.ConeRadius)
+	return fmt.Sprintf("{ \n mean_motion_rev_per_day: %v, \n cone_radius: %v \n min_elevation_angle: %v, \n number_of_isls: %v, \n"+
+		"isl_bandwidth: %v, \n isl_link_noise_coef: %v, \n isl_acquisition_time: %v, \n gsl_bandwidth: %v, \n gsl_link_noise_coef: %v, \n"+
+		"speed_of_light_vac: %v, \n max_packet_size: %v, \n interface_buffer_size: %v \n}",
+		satelliteConfig.MeanMotionRevPerDay, satelliteConfig.ConeRadius, satelliteConfig.MinElevationAngle, satelliteConfig.NumberOfISLs,
+		satelliteConfig.ISLBandwidth, satelliteConfig.ISLLinkNoiseCoef, satelliteConfig.ISLAcquisitionTime, satelliteConfig.GSLBandwidth,
+		satelliteConfig.GSLLinkNoiseCoef, satelliteConfig.SpeedOfLightVac, satelliteConfig.MaxPacketSize, satelliteConfig.InterfaceBufferSize)
 }
 
 /*

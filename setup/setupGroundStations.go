@@ -41,9 +41,8 @@ func openGroundStationFiles(fileName string) (*os.File, *csv.Reader) {
 	return file, csvReader
 }
 
-func initGroundStations(groundStations *GroundStationList, groundStationFileName string,
-	groundCalc helpers.IGroundStationCalculation, timeStep int, totalSimulationTime int) *helpers.GroundStationSpecs {
-
+func initGroundStations(groundStations *GroundStationList, config Config, groundStationFileName string,
+	groundCalc helpers.IGroundStationCalculation, timeStep int, totalSimulationTime int) {
 	totalSimulationTimeMilliseconds := totalSimulationTime * 1000
 	groundStationFile, groundStationCoordinates := openGroundStationFiles(groundStationFileName)
 	groundStationSpecs := make(helpers.GroundStationSpecs)
@@ -82,12 +81,26 @@ func initGroundStations(groundStations *GroundStationList, groundStationFileName
 		}
 		*groundStations = append(*groundStations,
 			actors.NewGroundStation(groundStationName, groundStationLatitude, groundStationLongitude, timeStep,
-				totalSimulationTimeMilliseconds, anomaly, ascension, groundCalc, anomalyEl),
+				totalSimulationTimeMilliseconds, anomaly, ascension, groundCalc, config.SatelliteConfig.SpeedOfLightVac,
+				config.SatelliteConfig.GSLBandwidth, config.SatelliteConfig.GSLLinkNoiseCoef, anomalyEl),
 		)
 	}
 	groundStationFile.Close()
 
-	return &groundStationSpecs
+	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
+}
+
+func startGroundStations(groundStations GroundStationList) (actors.SpaceDeviceChannels, []string) {
+	channels := make(actors.SpaceDeviceChannels, 0)
+	groundStationNames := make([]string, 0)
+	for _, groundStation := range groundStations {
+		channel := make(actors.SpaceDeviceChannel)
+		channels = append(channels, &channel)
+		groundStationNames = append(groundStationNames, groundStation.GetName())
+		groundStation.SetSpaceChannel(&channel)
+		groundStation.Run()
+	}
+	return channels, groundStationNames
 }
 
 func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceSpaceDeviceChannels {

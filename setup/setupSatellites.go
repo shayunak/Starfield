@@ -21,7 +21,7 @@ func calculateGroundStationDistancLimit(orbitRadius float64, minElevationAngle f
 }
 
 func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helpers.IAnomalyCalculation,
-	timeStep int, totalSimulationTime int, groundStationSpecs *helpers.GroundStationSpecs) {
+	timeStep int, totalSimulationTime int, groundCalc helpers.IGroundStationCalculation) {
 	minAscensionAngle := config.OrbitConfig.MinAscensionAngle
 	maxAscensionAngle := config.OrbitConfig.MaxAscensionAngle
 	numberOfOrbits := config.OrbitConfig.NumberOfOrbits
@@ -44,26 +44,25 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 			phaseShift = anomalyStep / 2.0
 		}
 
-		groundStationDistanceLimit := calculateGroundStationDistancLimit(orbitRadius, config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude)
 		orbit := helpers.NewOrbit(orbitRadius, earthMotionRadiansPerSecond, config.OrbitConfig.Altitude, ascensionNodeDegree,
-			inclinationRadians, orbit, config.ConsellationName, phaseShift, groundStationSpecs, groundStationDistanceLimit)
+			inclinationRadians, orbit, config.ConsellationName, phaseShift)
 
 		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
 			anomaly := phaseShift + float64(satellite)*anomalyStep
 
 			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds,
-				orbit, anomalyCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.NumberOfGSLs, config.SatelliteConfig.SpeedOfLightVac,
-				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime))
-
+				orbit, anomalyCalc, groundCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.SpeedOfLightVac,
+				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.GSLBandwidth,
+				config.SatelliteConfig.GSLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime))
 		}
 	}
 }
 
-func startSatellites(satellites SatelliteList) (actors.SpaceSatelliteChannels, []string) {
-	channels := make(actors.SpaceSatelliteChannels, 0)
+func startSatellites(satellites SatelliteList) (actors.SpaceDeviceChannels, []string) {
+	channels := make(actors.SpaceDeviceChannels, 0)
 	satelliteNames := make([]string, 0)
 	for _, satellite := range satellites {
-		channel := make(actors.SpaceSatelliteChannel)
+		channel := make(actors.SpaceDeviceChannel)
 		channels = append(channels, &channel)
 		satelliteNames = append(satelliteNames, satellite.GetName())
 		satellite.SetSpaceChannel(&channel)

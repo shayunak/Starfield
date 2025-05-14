@@ -1,8 +1,10 @@
-package connections
+package setup
 
 import (
 	"encoding/csv"
 	"os"
+
+	"github.com/shayunak/SatSimGo/connections"
 )
 
 func openISLTopologyFile(fileName string) (*os.File, *csv.Reader) {
@@ -35,10 +37,10 @@ func readISLTopologyFile(ISLTopologyFileName string) [][]string {
 	return records
 }
 
-func GenerateISLTopology(ISLTopologyFileName string) []Pair {
+func GenerateISLTopology(ISLTopologyFileName string) []connections.Pair {
 	satelliteIds := make(map[string]int)
 	ISLRecords := readISLTopologyFile(ISLTopologyFileName)
-	topology := make([]Pair, len(ISLRecords))
+	topology := make([]connections.Pair, len(ISLRecords))
 
 	for indx, record := range ISLRecords {
 		firstSatellite := record[0]
@@ -50,7 +52,7 @@ func GenerateISLTopology(ISLTopologyFileName string) []Pair {
 		} else {
 			satelliteIds[firstSatellite] = pairId + 1
 		}
-		topology[indx] = Pair{
+		topology[indx] = connections.Pair{
 			Id:              pairId,
 			FirstSatellite:  firstSatellite,
 			SecondSatellite: secondSatellite,

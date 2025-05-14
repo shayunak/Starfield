@@ -17,10 +17,11 @@
         "mean_motion_rev_per_day": 15.19,
         "min_elevation_angle": 30.0,
         "number_of_isls": 4,
-        "number of GSLs": 3,
         "isl_bandwidth": 1000000.0,
         "isl_link_noise_coef": 1500.0,
         "isl_acquisition_time": 12.0,
+        "gsl_bandwidth": 100000.0,
+        "gsl_link_noise_coef": 400.0,
         "max_packet_size": 12.0,
         "interface_buffer_size": 50
     }

@@ -7,8 +7,7 @@ import (
 const EVENT_SENT string = "SEND"
 const EVENT_RECEIVED string = "RECEIVE"
 const EVENT_DROPPED string = "DROP"
-const EVENT_CONNECTION_LOST string = "LOST_CONNECTION"
-const EVENT_CONNECTION_ESTABLISHED string = "ESTABLISHED_CONNECTION"
+const EVENT_CONNECTION_ESTABLISHED string = "CONNECTION_ESTABLISHED"
 
 type SimulationEntryList []ISimulationEntry
 

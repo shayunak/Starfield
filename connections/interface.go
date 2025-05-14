@@ -1,9 +1,5 @@
 package connections
 
-import (
-	"github.com/shayunak/SatSimGo/helpers"
-)
-
 type Pair struct {
 	Id              int    // pair id
 	FirstSatellite  string // sending satellite
@@ -30,7 +26,6 @@ type NetworkInterface struct {
 	Link               ILink
 	DeviceConnectedTo  string
 	LastPacketSentTime float64
-	GeoCalculation     helpers.IAnomalyCalculation
 }
 
 type INetworkInterface interface {
@@ -46,25 +41,13 @@ type INetworkInterface interface {
 type ILink interface {
 	CalculateDeliveryTime(packet Packet) float64
 	CalculateTransmissionTime(packet Packet) float64
-	UpdateLink(distance float64)
-}
-
-func (networkInterface *NetworkInterface) updateLink(timeStamp float64) {
-	ownerOrbit, ownerId := helpers.GetOrbitAndSatelliteId(networkInterface.InterfaceOwner)
-	connectedOrbit, connectedId := helpers.GetOrbitAndSatelliteId(networkInterface.DeviceConnectedTo)
-	updatedDistance := networkInterface.GeoCalculation.CalculateDistanceBySatelliteId(ownerId, ownerOrbit, connectedId, connectedOrbit, float64(timeStamp))
-	if updatedDistance > networkInterface.GeoCalculation.GetMaxDistance() {
-		networkInterface.IsLinkDown = true
-	} else {
-		networkInterface.IsLinkDown = false
-	}
-	networkInterface.Link.UpdateLink(updatedDistance)
+	UpdateDistance(ownerId string, connectedId string, timeStamp float64) bool
 }
 
 func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, int) {
 	networkInterface.LastPacketSentTime = max(timeOfEvent, networkInterface.LastPacketSentTime)
 	packet.PacketSentTime = networkInterface.LastPacketSentTime
-	networkInterface.updateLink(0.001 * networkInterface.LastPacketSentTime)
+	networkInterface.IsLinkDown = networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*networkInterface.LastPacketSentTime)
 
 	if networkInterface.IsLinkDown || len(*networkInterface.SendChannel) >= cap(*networkInterface.SendChannel) {
 		return false, int(packet.PacketSentTime)
@@ -100,7 +83,7 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 				networkInterface.CloseConnection()
 				break
 			}
-			networkInterface.updateLink(0.001 * packet.PacketSentTime)
+			networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packet.PacketSentTime)
 			lastTimeStampRead = packet.PacketSentTime + networkInterface.Link.CalculateDeliveryTime(packet)
 			event := Event{
 				TimeStamp: lastTimeStampRead,
@@ -126,6 +109,10 @@ func (networkInterface *NetworkInterface) GetLinkStatus() bool {
 }
 
 func (networkInterface *NetworkInterface) ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet) {
+	if networkInterface.DeviceConnectedTo == newDeviceConnectedTo {
+		return
+	}
+	networkInterface.CloseConnection()
 	networkInterface.DeviceConnectedTo = newDeviceConnectedTo
 	networkInterface.SendChannel = newSendChannel
 	networkInterface.ReceiveChannel = newReceiveChannel

@@ -52,9 +52,11 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 		AnomalyCalculations: anomalyCalc,
 		ElevationLimitRatio: calculateElevationLimitRatio(config.OrbitConfig.EarthRadius, orbitRadius,
 			config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
-		Altitude:           config.OrbitConfig.Altitude,
-		EarthOrbitRatio:    config.OrbitConfig.EarthRadius / orbitRadius,
-		EarthRotaionMotion: earthMotionRadiansPerSecond,
+		Altitude:                    config.OrbitConfig.Altitude,
+		EarthOrbitRatio:             config.OrbitConfig.EarthRadius / orbitRadius,
+		EarthRotaionMotion:          earthMotionRadiansPerSecond,
+		GroundStationsDistanceLimit: calculateGroundStationDistancLimit(orbitRadius, config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
+		GroundStations:              nil,
 	}
 
 	return anomalyCalc, groundCalc
@@ -63,9 +65,10 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) {
 	*space = &actors.Space{
 		TotalSimulationTime:         totalSimulationTime,
-		SpaceSatelliteChannels:      nil,
+		SpaceDeviceChannels:         nil,
 		DistancesSpaceChannels:      nil,
-		SatelliteNames:              nil,
+		DeviceNames:                 nil,
+		InterfaceBufferSize:         config.SatelliteConfig.InterfaceBufferSize,
 		DistanceEntries:             make(helpers.DistanceEntryList, 0),
 		ConsellationName:            config.ConsellationName,
 		RemainingUnprocessedPackets: totalNumberOfPackets,
@@ -95,8 +98,8 @@ func SetupSimulatorDistances(configFileName string, groundStationFileName string
 
 	// initializing the actors
 	initSpace(&space, config, timeStep, totalSimulationTime, 0)
-	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
-	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
+	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
 
 	// starting the actors
 	channels := startDistancesSatellites(satellites)
@@ -119,8 +122,8 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	anomalyCalc, groundCalc := initCalculators(config)
 
 	// initializing the actors
-	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
-	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
+	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
 
 	// reading the traffic file
 	totalNumberOfPackets := loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
@@ -148,8 +151,11 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	channels, satelliteNames := startSatellites(satellites)
-	space.SetSatelliteChannels(&channels, satelliteNames)
+	satelliteChannels, satelliteNames := startSatellites(satellites)
+	groundStationChannels, groundStationNames := startGroundStations(groundStations)
+	channels := append(groundStationChannels, satelliteChannels...)
+	names := append(satelliteNames, groundStationNames...)
+	space.SetDeviceChannels(&channels, names)
 	space.Run(simulationDone)
 }
 
@@ -166,8 +172,8 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	anomalyCalc, groundCalc := initCalculators(config)
 
 	// initializing the actors
-	groundStationSpecs := initGroundStations(&groundStations, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
-	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundStationSpecs)
+	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
 
 	// reading the traffic file
 	totalNumberOfPackets := loadTrafficOnNodes(trafficFile, &groundStations, config.SatelliteConfig.MaxPacketSize)
@@ -188,14 +194,17 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initSpace(&space, config, timeStep, totalSimulationTime, totalNumberOfPackets)
 
 	// bringing up the ISL topology
-	topologyPairs := connections.GenerateISLTopology(ISLTopologyFileName)
+	topologyPairs := GenerateISLTopology(ISLTopologyFileName)
 	topologyList := connections.GetTopologyList(topologyPairs, config.SatelliteConfig.InterfaceBufferSize)
 
 	// adding topology data to satellites
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	channels, satelliteNames := startSatellites(satellites)
-	space.SetSatelliteChannels(&channels, satelliteNames)
+	satelliteChannels, satelliteNames := startSatellites(satellites)
+	groundStationChannels, groundStationNames := startGroundStations(groundStations)
+	channels := append(groundStationChannels, satelliteChannels...)
+	names := append(satelliteNames, groundStationNames...)
+	space.SetDeviceChannels(&channels, names)
 	space.Run(simulationDone)
 }
