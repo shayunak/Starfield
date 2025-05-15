@@ -50,16 +50,47 @@ def is_edge_in_grid_plus(first_satellite_name, second_satellite_name,  number_of
     return False
 
 
-def generate_grid_plus_graph_from_timestamp_data(timeStamp, dataframe, nodes, number_of_orbits, number_of_satellites_per_orbit):
-    distance_graph = nx.Graph()
-    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == timeStamp]
-    distance_graph.add_nodes_from(nodes)
-    for index, row in timestamp_data.iterrows():
+def generate_grid_plus_graph_from_timestamp_data(time_stamp, dataframe, nodes, number_of_orbits, number_of_satellites_per_orbit):
+    graph = nx.Graph()
+    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == time_stamp]
+    graph.add_nodes_from(nodes)
+    for _, row in timestamp_data.iterrows():
         if is_edge_in_grid_plus(row['FirstSatelliteId'], row['SecondSatelliteId'], number_of_orbits, number_of_satellites_per_orbit):
-            distance_graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
+            graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
 
     # deleteing self-loops
-    distance_graph.remove_edges_from(nx.selfloop_edges(distance_graph))
+    graph.remove_edges_from(nx.selfloop_edges(graph))
 
-    return distance_graph
+    return graph
+
+def read_static_topology_file(filename):
+    topology_dataframe = pd.read_csv(f"./input/{filename}")
+    topology = set(zip(topology_dataframe.FirstSatellite, topology_dataframe.SecondSatellite))
+
+    return topology
+
+def read_dynamic_topology_file(filename):
+    topology_dataframe = pd.read_csv(f"./input/{filename}")
+    topology = topology_dataframe.groupby('TimeStamp').apply(lambda x: list(zip(x['FirstSatellite'], x['SecondSatellite']))).to_dict()
+
+    return topology
+
+def check_topology_consistency(topology, distances):
+    distance_pairs = set(zip(distances.FirstSatelliteId, distances.SecondSatelliteId))
+    if not (topology <= distance_pairs):
+        raise ValueError("Topology is not consistent with distances!")
+
+def generate_static_topology_graph_from_timestamp_data(timestamp, dataframe, nodes, topology):
+    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == timestamp]
+    check_topology_consistency(topology, timestamp_data)
+    graph = nx.Graph()
+    graph.add_nodes_from(nodes)
+    for _, row in timestamp_data.iterrows():
+        if (row['FirstSatelliteId'], row['SecondSatelliteId']) in topology:
+            graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
+
+    # deleteing self-loops
+    graph.remove_edges_from(nx.selfloop_edges(graph))
+
+    return graph
 
