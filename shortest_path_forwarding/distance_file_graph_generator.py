@@ -10,10 +10,11 @@ def read_distance_file(filename):
     time_step = int(splited_filename[3][:-2])
     total_time = int(splited_filename[4][:-1]) * 1000
     simulation_details = f"{splited_filename[2]}#{splited_filename[3]}#{splited_filename[4]}"
+    constellation_name = splited_filename[2]
     distance_csv_dataframe = pd.read_csv(f"./generated/{filename}")
     nodes = distance_csv_dataframe['FirstSatelliteId'].unique().tolist()
 
-    return distance_csv_dataframe, time_step, total_time, simulation_details, nodes
+    return distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes
 
 def generate_general_graph_from_timestamp_data(timeStamp, dataframe, nodes):
     distance_graph = nx.Graph()
@@ -30,6 +31,12 @@ def generate_general_graph_from_timestamp_data(timeStamp, dataframe, nodes):
 def get_orbit_anomaly_id(satellite_name):
     splitted_name = satellite_name.split("-")
     return int(splitted_name[1]), int(splitted_name[2])
+
+def is_satellite_id(satellite_id, constellation_name):
+    splitted_name = satellite_id.split("-")
+    if len(splitted_name) == 3 and splitted_name[0] == constellation_name:
+        return True
+    return False
 
 def is_edge_in_grid_plus(first_satellite_name, second_satellite_name,  number_of_orbits, number_of_satellites_per_orbit):
     first_orbit_id, first_satellite_id = get_orbit_anomaly_id(first_satellite_name)
@@ -50,14 +57,17 @@ def is_edge_in_grid_plus(first_satellite_name, second_satellite_name,  number_of
     return False
 
 
-def generate_grid_plus_graph_from_timestamp_data(time_stamp, dataframe, nodes, number_of_orbits, number_of_satellites_per_orbit):
+def generate_grid_plus_graph_from_timestamp_data(time_stamp, dataframe, nodes, number_of_orbits, number_of_satellites_per_orbit, constellation_name):
     graph = nx.Graph()
     timestamp_data = dataframe.loc[dataframe['TimeStamp'] == time_stamp]
     graph.add_nodes_from(nodes)
     for _, row in timestamp_data.iterrows():
-        if is_edge_in_grid_plus(row['FirstSatelliteId'], row['SecondSatelliteId'], number_of_orbits, number_of_satellites_per_orbit):
+        if is_satellite_id(row['FirstSatelliteId'], constellation_name) and is_satellite_id(row['SecondSatelliteId'], constellation_name):
+            if is_edge_in_grid_plus(row['FirstSatelliteId'], row['SecondSatelliteId'], number_of_orbits, number_of_satellites_per_orbit):
+                graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
+        else:
             graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
-
+        
     # deleteing self-loops
     graph.remove_edges_from(nx.selfloop_edges(graph))
 
@@ -80,13 +90,16 @@ def check_topology_consistency(topology, distances):
     if not (topology <= distance_pairs):
         raise ValueError("Topology is not consistent with distances!")
 
-def generate_static_topology_graph_from_timestamp_data(timestamp, dataframe, nodes, topology):
+def generate_static_topology_graph_from_timestamp_data(timestamp, dataframe, nodes, topology, constellation_name):
     timestamp_data = dataframe.loc[dataframe['TimeStamp'] == timestamp]
     check_topology_consistency(topology, timestamp_data)
     graph = nx.Graph()
     graph.add_nodes_from(nodes)
     for _, row in timestamp_data.iterrows():
-        if (row['FirstSatelliteId'], row['SecondSatelliteId']) in topology:
+        if is_satellite_id(row['FirstSatelliteId'], constellation_name) and is_satellite_id(row['SecondSatelliteId'], constellation_name):
+            if (row['FirstSatelliteId'], row['SecondSatelliteId']) in topology:
+                graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
+        else:
             graph.add_edge(row['FirstSatelliteId'], row['SecondSatelliteId'], weight=row['Distance'])
 
     # deleteing self-loops
