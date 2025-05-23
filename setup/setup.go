@@ -3,6 +3,7 @@ package setup
 import (
 	"fmt"
 	"math"
+	"os"
 	"sync"
 
 	"github.com/shayunak/SatSimGo/actors"
@@ -137,7 +138,9 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	// adding forwarding file data to ground stations
 	for _, gs := range groundStations {
 		groundStationForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, gs.GetName())
-		gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
+		if _, err := os.Stat(groundStationForwardingFileName); err == nil {
+			gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
+		}
 	}
 
 	// initializing the space
@@ -187,7 +190,9 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	// adding forwarding file data to ground stations
 	for _, gs := range groundStations {
 		groundStationForwardingFileName := fmt.Sprintf("./forwarding_table/%s/%s.csv", forwardingFolder, gs.GetName())
-		gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
+		if _, err := os.Stat(groundStationForwardingFileName); err == nil {
+			gs.SetForwardingTable(LoadForwardingTableInMemory(groundStationForwardingFileName))
+		}
 	}
 
 	// initializing the space

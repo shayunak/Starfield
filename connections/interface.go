@@ -20,7 +20,6 @@ type NetworkInterface struct {
 	/* Chance to buffer packets if the link is down*/
 	InterfaceId        int
 	InterfaceOwner     string
-	IsLinkDown         bool
 	SendChannel        *chan Packet
 	ReceiveChannel     *chan Packet
 	Link               ILink
@@ -32,7 +31,7 @@ type INetworkInterface interface {
 	Send(packet Packet, timeOfEvent float64) (bool, int)
 	Receive() []Event
 	GetDeviceConnectedTo() string
-	GetLinkStatus() bool
+	GetDeviceOwner() string
 	GetLink() ILink
 	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
 	CloseConnection()
@@ -47,9 +46,14 @@ type ILink interface {
 func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, int) {
 	networkInterface.LastPacketSentTime = max(timeOfEvent, networkInterface.LastPacketSentTime)
 	packet.PacketSentTime = networkInterface.LastPacketSentTime
-	networkInterface.IsLinkDown = networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*networkInterface.LastPacketSentTime)
+	linkDown := networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*networkInterface.LastPacketSentTime)
 
-	if networkInterface.IsLinkDown || len(*networkInterface.SendChannel) >= cap(*networkInterface.SendChannel) {
+	if linkDown {
+		networkInterface.CloseConnection()
+		return false, int(packet.PacketSentTime)
+	}
+
+	if len(*networkInterface.SendChannel) >= cap(*networkInterface.SendChannel) {
 		return false, int(packet.PacketSentTime)
 	}
 
@@ -104,15 +108,17 @@ func (networkInterface *NetworkInterface) GetDeviceConnectedTo() string {
 	return networkInterface.DeviceConnectedTo
 }
 
-func (networkInterface *NetworkInterface) GetLinkStatus() bool {
-	return networkInterface.IsLinkDown
+func (networkInterface *NetworkInterface) GetDeviceOwner() string {
+	return networkInterface.InterfaceOwner
 }
 
 func (networkInterface *NetworkInterface) ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet) {
 	if networkInterface.DeviceConnectedTo == newDeviceConnectedTo {
 		return
 	}
-	networkInterface.CloseConnection()
+	if networkInterface.DeviceConnectedTo != "" {
+		networkInterface.CloseConnection()
+	}
 	networkInterface.DeviceConnectedTo = newDeviceConnectedTo
 	networkInterface.SendChannel = newSendChannel
 	networkInterface.ReceiveChannel = newReceiveChannel
@@ -129,28 +135,21 @@ func GetTopologyList(pairs []Pair, interfaceBufferSize int) map[string]map[strin
 	for _, pair := range pairs {
 		if topologyList[pair.FirstSatellite] == nil {
 			topologyList[pair.FirstSatellite] = make(map[string]InterfaceEntry)
-			if topologyList[pair.SecondSatellite] == nil {
-				channel := make(chan Packet, interfaceBufferSize)
-				topologyList[pair.FirstSatellite][pair.SecondSatellite] = InterfaceEntry{
-					InterfaceId:     pair.Id,
-					ConnectedDevice: pair.SecondSatellite,
-					SendChannel:     &channel,
-					ReceiveChannel:  nil,
-				}
-			}
+		}
+		channel := make(chan Packet, interfaceBufferSize)
+		topologyList[pair.FirstSatellite][pair.SecondSatellite] = InterfaceEntry{
+			InterfaceId:     pair.Id,
+			ConnectedDevice: pair.SecondSatellite,
+			SendChannel:     &channel,
+			ReceiveChannel:  nil,
 		}
 	}
 
 	// Second pass assigning recieve channels
 	for _, pair := range pairs {
-		entry := topologyList[pair.SecondSatellite][pair.FirstSatellite]
-		channel := topologyList[pair.FirstSatellite][pair.SecondSatellite].SendChannel
-		topologyList[pair.SecondSatellite][pair.FirstSatellite] = InterfaceEntry{
-			InterfaceId:     entry.InterfaceId,
-			ConnectedDevice: entry.ConnectedDevice,
-			SendChannel:     entry.SendChannel,
-			ReceiveChannel:  channel,
-		}
+		entry := topologyList[pair.FirstSatellite][pair.SecondSatellite]
+		entry.ReceiveChannel = topologyList[pair.SecondSatellite][pair.FirstSatellite].SendChannel
+		topologyList[pair.FirstSatellite][pair.SecondSatellite] = entry
 	}
 
 	return topologyList

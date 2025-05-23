@@ -26,10 +26,7 @@ func (isl *ISL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 }
 
 func (isl *ISL) isLinkOutOfRange(distance float64) bool {
-	if distance > isl.GeoCalculation.GetMaxDistance() {
-		return true
-	}
-	return false
+	return distance > isl.GeoCalculation.GetMaxDistance()
 }
 
 func (isl *ISL) CalculateDeliveryTime(packet Packet) float64 {
@@ -48,7 +45,6 @@ func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, 
 		islList[i] = &NetworkInterface{
 			InterfaceId:        i,
 			InterfaceOwner:     ownerSatellite,
-			IsLinkDown:         false,
 			SendChannel:        nil,
 			ReceiveChannel:     nil,
 			Link:               &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, anomalyCalculations},

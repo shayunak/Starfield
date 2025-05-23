@@ -94,11 +94,11 @@ func main() {
 	} else if args[1] == "--distances" && len(args) == 6 {
 		calculateDistancesSettingsRun(args[2], args[3], args[4], args[5])
 		log.Default().Println("Distances Generated...")
+	} else if args[1] == "--forwarding" && args[2] == "--grid_plus" && len(args) == 9 {
+		forwardingSettingsRunGridPlus(args[3], args[4], args[5], args[6], args[7], args[8])
+		log.Default().Println("Simulation Done...")
 	} else if args[1] == "--forwarding" && len(args) == 9 {
 		forwardingSettingsRun(args[2], args[3], args[4], args[5], args[6], args[7], args[8])
-		log.Default().Println("Simulation Done...")
-	} else if args[1] == "--forwarding" && args[2] == "--grid_plus" && len(args) == 9 {
-		forwardingSettingsRunGridPlus(args[2], args[3], args[4], args[5], args[6], args[7])
 		log.Default().Println("Simulation Done...")
 	} else {
 		fmt.Println("Invalid Option or Missing Arguments!")

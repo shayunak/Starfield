@@ -204,7 +204,7 @@ func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize f
 }
 
 func (gs *GroundStation) ReceiveFromInterfaces() {
-	if !gs.GSLInterface.GetLinkStatus() {
+	if gs.GSLInterface.GetDeviceConnectedTo() != "" {
 		receivedEvents := gs.GSLInterface.Receive()
 		for _, event := range receivedEvents {
 			heap.Push(&gs.EventQueue, event)

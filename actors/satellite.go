@@ -235,24 +235,6 @@ func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChan
 	return true
 }
 
-/*
-Updating happens when sending packets takes place
-func (satellite *Satellite) updateLinks() {
-	for i := 0; i < len(satellite.ISLInterfaces); i++ {
-		if satellite.ISLInterfaces[i].GetDeviceConnectedTo() != "" {
-			distance, ok := distances[satellite.ISLInterfaces[i].GetDeviceConnectedTo()]
-			// satellite out of range
-			if !ok {
-				satellite.ISLInterfaces[i].CloseConnection()
-				satellite.AvailableISL++
-			} else {
-				satellite.ISLInterfaces[i].GetLink().UpdateLink(distance)
-			}
-		}
-	}
-}
-*/
-
 func (satellite *Satellite) Run() {
 	log.Default().Println("Running satellite: ", satellite.Id)
 	go startSatellite(satellite)
@@ -284,7 +266,7 @@ func (satellite *Satellite) CheckIncomingConnections() bool {
 
 func (satellite *Satellite) ReceiveFromInterfaces() {
 	for _, inface := range satellite.ISLInterfaces {
-		if !inface.GetLinkStatus() {
+		if inface.GetDeviceConnectedTo() != "" {
 			receivedEvents := inface.Receive()
 			for _, event := range receivedEvents {
 				heap.Push(&satellite.EventQueue, event)
@@ -292,7 +274,7 @@ func (satellite *Satellite) ReceiveFromInterfaces() {
 			}
 		}
 	}
-	if !satellite.GSLInterface.GetLinkStatus() {
+	if satellite.GSLInterface.GetDeviceConnectedTo() != "" {
 		receivedEvents := satellite.GSLInterface.Receive()
 		for _, event := range receivedEvents {
 			heap.Push(&satellite.EventQueue, event)

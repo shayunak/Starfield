@@ -59,7 +59,6 @@ func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoise
 	return &NetworkInterface{
 		InterfaceId:    0,
 		InterfaceOwner: owner,
-		IsLinkDown:     false,
 		SendChannel:    nil,
 		ReceiveChannel: nil,
 		Link: &GSL{
