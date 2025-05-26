@@ -229,9 +229,10 @@ func (space *Space) ProcessEvent(event SimulationEvent, sourceIndx int) {
 	case SIMULATION_EVENT_RECEIVED:
 		eventType = helpers.EVENT_RECEIVED
 		packetId = event.Packet.PacketId
-		if event.Packet.Destination == event.ToDevice {
-			space.RemainingUnprocessedPackets -= 1
-		}
+	case SIMULATION_EVENT_DELIVERED:
+		eventType = helpers.EVENT_DELIVERED
+		packetId = event.Packet.PacketId
+		space.RemainingUnprocessedPackets -= 1
 	case SIMULATION_EVENT_DROPPED:
 		eventType = helpers.EVENT_DROPPED
 		packetId = event.Packet.PacketId
@@ -264,6 +265,17 @@ func (space *Space) startNewLink(event SimulationEvent, sourceIndex int) bool {
 	}
 	sendPacketChannel := make(chan connections.Packet, space.InterfaceBufferSize)
 	receivePacketChannel := make(chan connections.Packet, space.InterfaceBufferSize)
+
+	*channels[destIndex] <- SimulationEvent{
+		TimeStamp:  event.TimeStamp,
+		EventType:  SIMULATION_EVENT_CONNECTION_ESTABLISHED,
+		ToDevice:   event.FromDevice,
+		FromDevice: event.ToDevice,
+		LinkReq: &LinkChannelRequest{
+			SendChannel:    &receivePacketChannel,
+			RecieveChannel: &sendPacketChannel,
+		},
+	}
 	*channels[sourceIndex] <- SimulationEvent{
 		TimeStamp:  event.TimeStamp,
 		EventType:  SIMULATION_EVENT_CONNECTION_ESTABLISHED,
@@ -274,24 +286,14 @@ func (space *Space) startNewLink(event SimulationEvent, sourceIndex int) bool {
 			RecieveChannel: &receivePacketChannel,
 		},
 	}
-	*channels[sourceIndex] <- SimulationEvent{
-		TimeStamp:  event.TimeStamp,
-		EventType:  SIMULATION_EVENT_CONNECTION_ESTABLISHED,
-		ToDevice:   event.FromDevice,
-		FromDevice: event.ToDevice,
-		LinkReq: &LinkChannelRequest{
-			SendChannel:    &receivePacketChannel,
-			RecieveChannel: &sendPacketChannel,
-		},
-	}
 	return true
 }
 
 func startSpace(space ISpace, wg *sync.WaitGroup) {
 	for space.GetRemainingUnprocessedPackets() > 0 {
-		selectSatellitesCases := make([]reflect.SelectCase, space.GetNumberOfDevices())
-		initChannelCases(&selectSatellitesCases, space)
-		index, value, _ := reflect.Select(selectSatellitesCases)
+		selectDevicesCases := make([]reflect.SelectCase, space.GetNumberOfDevices())
+		initChannelCases(&selectDevicesCases, space)
+		index, value, _ := reflect.Select(selectDevicesCases)
 		simulationEvent := value.Interface().(SimulationEvent)
 		space.ProcessEvent(simulationEvent, index)
 	}
@@ -302,7 +304,7 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 
 func (space *Space) logSimulationSummary() {
 	sort.SliceStable(space.Events, func(i, j int) bool {
-		return space.Events[i].GetTimeStamp() < space.DistanceEntries[j].GetTimeStamp()
+		return space.Events[i].GetTimeStamp() < space.Events[j].GetTimeStamp()
 	}) // Sorting events by timestamp
 
 	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
@@ -321,7 +323,7 @@ func (space *Space) logSimulationSummary() {
 		log.Fatal(err)
 	}
 
-	rows := helpers.GetRowsFromDistanceEntries(&space.DistanceEntries)
+	rows := helpers.GetRowsFromEvents(&space.Events)
 	csvWriter := csv.NewWriter(outputFile)
 
 	if err := csvWriter.WriteAll(rows); err != nil {

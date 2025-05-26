@@ -30,19 +30,20 @@ func (gsl *GSL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 		updatedAnomaly, _ := gsl.GeoCalculation.GetAnomalyCalculations().UpdatePosition(gsl.GeometricSpec.Anomaly, timeStamp)
 		updatedDistance, isLinkInRange = gsl.GeoCalculation.GetCoveringGroundStations(timeStamp, updatedAnomaly, gsl.GeometricSpec.Orbit)[connectedId]
 		if !isLinkInRange {
-			return false
+			return true
 		}
 	} else {
 		updatedAscension := gsl.GeoCalculation.UpdatePosition(gsl.GeometricSpec.HeadPointAscension, timeStamp)
-		updatedDistance, isLinkInRange = gsl.GeoCalculation.FindSatellitesInRange(ownerId, updatedAscension, gsl.GeometricSpec.HeadPointAnomalyEl, timeStamp)[connectedId]
+		satellitesInRange := gsl.GeoCalculation.FindSatellitesInRange(ownerId, updatedAscension, gsl.GeometricSpec.HeadPointAnomalyEl, timeStamp)
+		updatedDistance, isLinkInRange = satellitesInRange[connectedId]
 		if !isLinkInRange {
-			return false
+			return true
 		}
 	}
 	distanceKM := updatedDistance / 1000.0
 	gsl.PropagationDelay = updatedDistance / gsl.SpeedOfLightVAC
 	gsl.Bitrate = gsl.Bandwidth * math.Log2(1+gsl.LinkNoiseCoef/math.Pow(distanceKM, 2))
-	return true
+	return false
 }
 
 func (gsl *GSL) CalculateDeliveryTime(packet Packet) float64 {

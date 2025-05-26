@@ -157,7 +157,7 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	satelliteChannels, satelliteNames := startSatellites(satellites)
 	groundStationChannels, groundStationNames := startGroundStations(groundStations)
 	channels := append(groundStationChannels, satelliteChannels...)
-	names := append(satelliteNames, groundStationNames...)
+	names := append(groundStationNames, satelliteNames...)
 	space.SetDeviceChannels(&channels, names)
 	space.Run(simulationDone)
 }
@@ -209,7 +209,7 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	satelliteChannels, satelliteNames := startSatellites(satellites)
 	groundStationChannels, groundStationNames := startGroundStations(groundStations)
 	channels := append(groundStationChannels, satelliteChannels...)
-	names := append(satelliteNames, groundStationNames...)
+	names := append(groundStationNames, satelliteNames...)
 	space.SetDeviceChannels(&channels, names)
 	space.Run(simulationDone)
 }

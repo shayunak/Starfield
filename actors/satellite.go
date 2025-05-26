@@ -269,7 +269,8 @@ func (satellite *Satellite) ReceiveFromInterfaces() {
 		if inface.GetDeviceConnectedTo() != "" {
 			receivedEvents := inface.Receive()
 			for _, event := range receivedEvents {
-				heap.Push(&satellite.EventQueue, event)
+				item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+				heap.Push(&satellite.EventQueue, &item)
 				satellite.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
 			}
 		}
@@ -277,7 +278,8 @@ func (satellite *Satellite) ReceiveFromInterfaces() {
 	if satellite.GSLInterface.GetDeviceConnectedTo() != "" {
 		receivedEvents := satellite.GSLInterface.Receive()
 		for _, event := range receivedEvents {
-			heap.Push(&satellite.EventQueue, event)
+			item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+			heap.Push(&satellite.EventQueue, &item)
 			satellite.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, satellite.GSLInterface.GetDeviceConnectedTo(), satellite.Name)
 		}
 	}

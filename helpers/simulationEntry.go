@@ -6,6 +6,7 @@ import (
 
 const EVENT_SENT string = "SEND"
 const EVENT_RECEIVED string = "RECEIVE"
+const EVENT_DELIVERED string = "DELIVERED"
 const EVENT_DROPPED string = "DROP"
 const EVENT_CONNECTION_ESTABLISHED string = "CONNECTION_ESTABLISHED"
 
@@ -30,7 +31,7 @@ func (entry *SimulationEntry) GetTimeStamp() int {
 }
 
 func (entry *SimulationEntry) getHeaders() []string {
-	return []string{"TimeStamp", "Event", "FromDevice", "ToDevice", "PacketId"}
+	return []string{"TimeStamp(ms)", "Event", "FromDevice", "ToDevice", "PacketId"}
 }
 
 func (entry *SimulationEntry) toSlice() []string {

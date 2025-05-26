@@ -56,11 +56,11 @@ type IGroundStation interface {
 	GetSpaceChannel() *SpaceDeviceChannel
 	SetSpaceChannel(channel *SpaceDeviceChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
-	GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) int
+	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) int
 	ReceiveFromInterfaces()
 	SendPackets()
 	CheckIncomingConnections() bool
-	generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet
+	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) []connections.Packet
 	sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 	establishConnection(toSatellite string, timeStamp int)
 }
@@ -164,12 +164,13 @@ func (gs *GroundStation) Run() {
 	go startGS(gs)
 }
 
-func (gs *GroundStation) generatePackets(maxPacketSize float64, entry TrafficEntry) []connections.Packet {
-	numberOfFullPackets := int(math.Ceil(1000 * entry.Length / maxPacketSize))
-	packets := make([]connections.Packet, numberOfFullPackets)
+func (gs *GroundStation) generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) []connections.Packet {
+	numberOfPackets := int(math.Ceil(1000 * entry.Length / maxPacketSize))
+	packets := make([]connections.Packet, numberOfPackets)
 
-	for i := 0; i < numberOfFullPackets; i++ {
+	for i := 0; i < numberOfPackets; i++ {
 		packets[i] = connections.Packet{
+			PacketId:       fromId + i,
 			Source:         gs.Name,
 			Destination:    entry.Destination,
 			Length:         maxPacketSize,
@@ -179,11 +180,13 @@ func (gs *GroundStation) generatePackets(maxPacketSize float64, entry TrafficEnt
 	return packets
 }
 
-func (gs *GroundStation) GenerateTraffic(traffic []TrafficEntry, maxPacketSize float64) int {
+func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) int {
 	number_of_packets := 0
+	id_assigned := fromId
 	for _, entry := range traffic {
-		packets := gs.generatePackets(maxPacketSize, entry)
-		number_of_packets = len(packets)
+		packets := gs.generatePackets(id_assigned, maxPacketSize, entry)
+		number_of_packets += len(packets)
+		id_assigned += len(packets)
 		for index, packet := range packets {
 			event := connections.Event{
 				TimeStamp: float64(entry.TimeStamp),
@@ -207,7 +210,8 @@ func (gs *GroundStation) ReceiveFromInterfaces() {
 	if gs.GSLInterface.GetDeviceConnectedTo() != "" {
 		receivedEvents := gs.GSLInterface.Receive()
 		for _, event := range receivedEvents {
-			heap.Push(&gs.EventQueue, event)
+			item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+			heap.Push(&gs.EventQueue, &item)
 			gs.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, gs.GSLInterface.GetDeviceConnectedTo(), gs.Name)
 		}
 	}

@@ -55,11 +55,13 @@ func readTrafficGeneratorFile(generatorFile string) map[string][]actors.TrafficE
 func loadTrafficOnNodes(generatorFile string, groundStations *GroundStationList, maxPacketSize float64) int {
 	trafficMatrix := readTrafficGeneratorFile(generatorFile)
 	totalNumberOfPackets := 0
+	packetId := 0
 
 	for _, gs := range *groundStations {
 		sourceEntry, isPresent := trafficMatrix[gs.GetName()]
 		if isPresent {
-			totalNumberOfPackets += gs.GenerateTraffic(sourceEntry, maxPacketSize)
+			totalNumberOfPackets += gs.GenerateTraffic(packetId, sourceEntry, maxPacketSize)
+			packetId += totalNumberOfPackets
 		}
 	}
 
