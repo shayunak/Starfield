@@ -53,7 +53,8 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds,
 				orbit, anomalyCalc, groundCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.SpeedOfLightVac,
 				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.GSLBandwidth,
-				config.SatelliteConfig.GSLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime))
+				config.SatelliteConfig.GSLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime,
+				config.SatelliteConfig.MaxPacketSize, config.SatelliteConfig.InterfaceBufferSize))
 		}
 	}
 }

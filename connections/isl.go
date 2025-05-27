@@ -12,6 +12,7 @@ type ISL struct {
 	PropagationDelay float64
 	Bandwidth        float64
 	LinkNoiseCoef    float64
+	BufferSize       float64
 	GeoCalculation   helpers.IAnomalyCalculation
 }
 
@@ -33,13 +34,17 @@ func (isl *ISL) CalculateDeliveryTime(packet Packet) float64 {
 	return isl.PropagationDelay + float64(packet.Length)/isl.Bitrate
 }
 
+func (isl *ISL) calculateBufferThresholdTime() float64 {
+	return isl.BufferSize / isl.Bitrate
+}
+
 // in ms
 func (isl *ISL) CalculateTransmissionTime(packet Packet) float64 {
 	return packet.Length / isl.Bitrate
 }
 
 func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
-	anomalyCalculations helpers.IAnomalyCalculation) []INetworkInterface {
+	anomalyCalculations helpers.IAnomalyCalculation, bufferSize float64) []INetworkInterface {
 	islList := make([]INetworkInterface, numberOfIsls)
 	for i := 0; i < numberOfIsls; i++ {
 		islList[i] = &NetworkInterface{
@@ -47,7 +52,7 @@ func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, 
 			InterfaceOwner:     ownerSatellite,
 			SendChannel:        nil,
 			ReceiveChannel:     nil,
-			Link:               &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, anomalyCalculations},
+			Link:               &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, bufferSize, anomalyCalculations},
 			DeviceConnectedTo:  "",
 			LastPacketSentTime: 0,
 		}

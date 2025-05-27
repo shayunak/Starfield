@@ -82,7 +82,8 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 		*groundStations = append(*groundStations,
 			actors.NewGroundStation(groundStationName, groundStationLatitude, groundStationLongitude, timeStep,
 				totalSimulationTimeMilliseconds, anomaly, ascension, groundCalc, config.SatelliteConfig.SpeedOfLightVac,
-				config.SatelliteConfig.GSLBandwidth, config.SatelliteConfig.GSLLinkNoiseCoef, anomalyEl),
+				config.SatelliteConfig.GSLBandwidth, config.SatelliteConfig.GSLLinkNoiseCoef, anomalyEl,
+				config.SatelliteConfig.MaxPacketSize, config.SatelliteConfig.InterfaceBufferSize),
 		)
 	}
 	groundStationFile.Close()

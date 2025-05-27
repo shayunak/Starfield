@@ -19,6 +19,7 @@ type GSL struct {
 	PropagationDelay float64
 	Bandwidth        float64
 	LinkNoiseCoef    float64
+	BufferSize       float64
 	GeoCalculation   helpers.IGroundStationCalculation
 	GeometricSpec    *GeoSpec
 }
@@ -54,9 +55,13 @@ func (gsl *GSL) CalculateTransmissionTime(packet Packet) float64 {
 	return packet.Length / gsl.Bitrate
 }
 
+func (gsl *GSL) calculateBufferThresholdTime() float64 {
+	return gsl.BufferSize / gsl.Bitrate
+}
+
 func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
 	orbit helpers.IOrbit, anomaly float64, headPointAscension float64, headPointAnomalyEl helpers.AnomalyElements,
-	groundStationCalculations helpers.IGroundStationCalculation) INetworkInterface {
+	groundStationCalculations helpers.IGroundStationCalculation, bufferSize float64) INetworkInterface {
 	return &NetworkInterface{
 		InterfaceId:    0,
 		InterfaceOwner: owner,
@@ -69,6 +74,7 @@ func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoise
 			Bandwidth:        bandwidth,
 			LinkNoiseCoef:    linkNoiseCoef,
 			GeoCalculation:   groundStationCalculations,
+			BufferSize:       bufferSize,
 			GeometricSpec: &GeoSpec{
 				Anomaly:            anomaly,
 				Orbit:              orbit,

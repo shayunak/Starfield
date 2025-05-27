@@ -86,7 +86,8 @@ func (satellite *Satellite) getTotalSimulationTime() int {
 func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int, orbit helpers.IOrbit,
 	anomalyCalculations helpers.IAnomalyCalculation, groundStationCalculations helpers.IGroundStationCalculation,
 	numberOfIsls int, speedOfLightVac float64, ISLBandwidth float64, ISLLinkNoiseCoefficient float64,
-	GSLBandwidth float64, GSLLinkNoiseCoefficient float64, acquisitionTime float64) ISatellite {
+	GSLBandwidth float64, GSLLinkNoiseCoefficient float64, acquisitionTime float64, maxPacketSize float64,
+	interfaceBufferSize int) ISatellite {
 	var newSatellite Satellite
 
 	newSatellite.Id = id
@@ -107,9 +108,10 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 	newSatellite.EventQueue = make(connections.PriorityQueue, 0)
 	heap.Init(&newSatellite.EventQueue)
 	newSatellite.AvailableISL = numberOfIsls
-	newSatellite.ISLInterfaces = connections.InitISLs(newSatellite.Name, numberOfIsls, speedOfLightVac, ISLBandwidth, ISLLinkNoiseCoefficient, anomalyCalculations)
+	newSatellite.ISLInterfaces = connections.InitISLs(newSatellite.Name, numberOfIsls, speedOfLightVac, ISLBandwidth,
+		ISLLinkNoiseCoefficient, anomalyCalculations, maxPacketSize*float64(interfaceBufferSize))
 	newSatellite.GSLInterface = connections.InitGSL(newSatellite.Name, speedOfLightVac, GSLBandwidth, GSLLinkNoiseCoefficient, orbit,
-		newSatellite.OrbitalAnomaly, 0.0, newSatellite.AnomalyElements, groundStationCalculations)
+		newSatellite.OrbitalAnomaly, 0.0, newSatellite.AnomalyElements, groundStationCalculations, maxPacketSize*float64(interfaceBufferSize))
 
 	return &newSatellite
 }
@@ -319,24 +321,30 @@ func (satellite *Satellite) SendPackets() {
 			if satellite.Orbit.IsOwnerSatellite(forwardingChoice) {
 				interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, satellite.getTimeStamp(), satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
 				if interfaceId != -1 {
-					success, timeOfAttempt := satellite.ISLInterfaces[interfaceId].Send(packet, itemPopped.Value.TimeStamp)
-					if success {
+					packetDropped, packetBuffered, timeOfAttempt := satellite.ISLInterfaces[interfaceId].Send(packet, itemPopped.Value.TimeStamp)
+					if !packetDropped && !packetBuffered {
 						satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
-					} else {
+					} else if packetDropped {
 						satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
+					} else if packetBuffered {
+						heap.Push(&satellite.EventQueue, itemPopped)
+						break
 					}
 				} else {
-					heap.Push(&satellite.EventQueue, itemPopped)
+					satellite.sendEvent(timeStamp, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
 				}
 			} else {
 				if satellite.GSLInterface.GetDeviceConnectedTo() != forwardingChoice {
 					satellite.establishConnection(forwardingChoice, timeStamp)
 				}
-				success, timeOfAttempt := satellite.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
-				if success {
+				packetDropped, packetBuffered, timeOfAttempt := satellite.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
+				if !packetDropped && !packetBuffered {
 					satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.GSLInterface.GetDeviceConnectedTo())
-				} else {
+				} else if packetDropped {
 					satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.GSLInterface.GetDeviceConnectedTo())
+				} else if packetBuffered {
+					heap.Push(&satellite.EventQueue, itemPopped)
+					break
 				}
 			}
 		}

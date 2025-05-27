@@ -79,7 +79,8 @@ func (gs *GroundStation) getTotalSimulationTime() int {
 
 func NewGroundStation(name string, latitude float64, longitude float64, dt int, totalSimulationTime int,
 	headPointAnomaly float64, headPointAscension float64, groundStationCalculation helpers.IGroundStationCalculation,
-	speedOfLightVac float64, bandwidth float64, linkNoiseCoefficient float64, headPointAnomalyEl helpers.AnomalyElements) IGroundStation {
+	speedOfLightVac float64, bandwidth float64, linkNoiseCoefficient float64, headPointAnomalyEl helpers.AnomalyElements,
+	maxPacketSize float64, interfaceBufferSize int) IGroundStation {
 
 	var newGS GroundStation
 
@@ -98,7 +99,8 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 
 	// Channels
 	newGS.EventQueue = make(connections.PriorityQueue, 0)
-	newGS.GSLInterface = connections.InitGSL(newGS.Name, speedOfLightVac, bandwidth, linkNoiseCoefficient, nil, 0.0, headPointAscension, headPointAnomalyEl, groundStationCalculation)
+	newGS.GSLInterface = connections.InitGSL(newGS.Name, speedOfLightVac, bandwidth, linkNoiseCoefficient, nil, 0.0,
+		headPointAscension, headPointAnomalyEl, groundStationCalculation, maxPacketSize*float64(interfaceBufferSize))
 
 	return &newGS
 }
@@ -252,11 +254,14 @@ func (gs *GroundStation) SendPackets() {
 				if gs.GSLInterface.GetDeviceConnectedTo() != forwardingSatellite {
 					gs.establishConnection(forwardingSatellite, timeStamp)
 				}
-				success, timeOfAttempt := gs.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
-				if success {
+				packetDropped, packetBuffered, timeOfAttempt := gs.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
+				if !packetDropped && !packetBuffered {
 					gs.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, gs.Name, gs.GSLInterface.GetDeviceConnectedTo())
-				} else {
+				} else if packetDropped {
 					gs.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, gs.Name, gs.GSLInterface.GetDeviceConnectedTo())
+				} else if packetBuffered {
+					heap.Push(&gs.EventQueue, itemPopped)
+					break
 				}
 			} else {
 				gs.sendEvent(int(itemPopped.Value.TimeStamp), SIMULATION_EVENT_DELIVERED, itemPopped.Value.Data, packet.Source, packet.Destination)
