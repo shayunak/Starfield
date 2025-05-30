@@ -249,7 +249,7 @@ func (gs *GroundStation) SendPackets() {
 		if eventType == connections.SEND_EVENT {
 			packet := *itemPopped.Value.Data
 			if packet.Destination != gs.Name {
-				timeStamp := int(itemPopped.Value.TimeStamp / float64(gs.Dt))
+				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
 				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
 				if gs.GSLInterface.GetDeviceConnectedTo() != forwardingSatellite {
 					gs.establishConnection(forwardingSatellite, timeStamp)

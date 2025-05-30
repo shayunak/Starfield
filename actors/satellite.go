@@ -316,7 +316,7 @@ func (satellite *Satellite) SendPackets() {
 		eventType := itemPopped.Value.Type
 		if eventType == connections.SEND_EVENT {
 			packet := *itemPopped.Value.Data
-			timeStamp := int(itemPopped.Value.TimeStamp / float64(satellite.Dt))
+			timeStamp := int(itemPopped.Value.TimeStamp/float64(satellite.Dt)) * satellite.Dt
 			forwardingChoice := satellite.ForwardingTable[timeStamp][packet.Destination]
 			if satellite.Orbit.IsOwnerSatellite(forwardingChoice) {
 				interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, satellite.getTimeStamp(), satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
