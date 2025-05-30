@@ -24,7 +24,7 @@ func (entry *DistanceEntry) GetTimeStamp() int {
 }
 
 func (entry *DistanceEntry) getHeaders() []string {
-	return []string{"TimeStamp", "FirstSatelliteId", "SecondSatelliteId", "Distance"}
+	return []string{"TimeStamp(ms)", "FirstDeviceId", "SecondDeviceId", "Distance(m)"}
 }
 
 func (entry *DistanceEntry) toSlice() []string {
