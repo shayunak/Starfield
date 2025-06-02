@@ -14,7 +14,7 @@ def forwarding_folder_csv_file(simulation_details, title, nodes):
     # making forwarding table output folder, name
     node_files = []
     node_writers = {}
-    folder_name = f"{title}#{datetime.datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}.csv"
+    folder_name = f"{title}#{datetime.datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}"
     if not os.path.exists("./forwarding_table"):
         os.makedirs("./forwarding_table")
 
