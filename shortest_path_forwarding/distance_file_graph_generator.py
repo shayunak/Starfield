@@ -18,10 +18,10 @@ def read_distance_file(filename):
 
 def generate_general_graph_from_timestamp_data(timeStamp, dataframe, nodes):
     distance_graph = nx.Graph()
-    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == timeStamp]
+    timestamp_data = dataframe.loc[dataframe['TimeStamp(ms)'] == timeStamp]
     distance_graph.add_nodes_from(nodes)
     for index, row in timestamp_data.iterrows():
-        distance_graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance'])
+        distance_graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance(m)'])
 
     # deleteing self-loops
     distance_graph.remove_edges_from(nx.selfloop_edges(distance_graph))
@@ -59,14 +59,14 @@ def is_edge_in_grid_plus(first_satellite_name, second_satellite_name,  number_of
 
 def generate_grid_plus_graph_from_timestamp_data(time_stamp, dataframe, nodes, number_of_orbits, number_of_satellites_per_orbit, constellation_name):
     graph = nx.Graph()
-    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == time_stamp]
+    timestamp_data = dataframe.loc[dataframe['TimeStamp(ms)'] == time_stamp]
     graph.add_nodes_from(nodes)
     for _, row in timestamp_data.iterrows():
         if is_satellite_id(row['FirstDeviceId'], constellation_name) and is_satellite_id(row['SecondDeviceId'], constellation_name):
             if is_edge_in_grid_plus(row['FirstDeviceId'], row['SecondDeviceId'], number_of_orbits, number_of_satellites_per_orbit):
-                graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance'])
+                graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance(m)'])
         else:
-            graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance'])
+            graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance(m)'])
         
     # deleteing self-loops
     graph.remove_edges_from(nx.selfloop_edges(graph))
@@ -81,7 +81,7 @@ def read_static_topology_file(filename):
 
 def read_dynamic_topology_file(filename):
     topology_dataframe = pd.read_csv(f"./input/{filename}")
-    topology = topology_dataframe.groupby('TimeStamp').apply(lambda x: list(zip(x['FirstSatellite'], x['SecondSatellite']))).to_dict()
+    topology = topology_dataframe.groupby('TimeStamp(ms)').apply(lambda x: list(zip(x['FirstSatellite'], x['SecondSatellite']))).to_dict()
 
     return topology
 
@@ -91,16 +91,16 @@ def check_topology_consistency(topology, distances):
         raise ValueError("Topology is not consistent with distances!")
 
 def generate_static_topology_graph_from_timestamp_data(timestamp, dataframe, nodes, topology, constellation_name):
-    timestamp_data = dataframe.loc[dataframe['TimeStamp'] == timestamp]
+    timestamp_data = dataframe.loc[dataframe['TimeStamp(ms)'] == timestamp]
     check_topology_consistency(topology, timestamp_data)
     graph = nx.Graph()
     graph.add_nodes_from(nodes)
     for _, row in timestamp_data.iterrows():
         if is_satellite_id(row['FirstDeviceId'], constellation_name) and is_satellite_id(row['SecondDeviceId'], constellation_name):
             if (row['FirstDeviceId'], row['SecondDeviceId']) in topology:
-                graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance'])
+                graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance(m)'])
         else:
-            graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance'])
+            graph.add_edge(row['FirstDeviceId'], row['SecondDeviceId'], weight=row['Distance(m)'])
 
     # deleteing self-loops
     graph.remove_edges_from(nx.selfloop_edges(graph))
