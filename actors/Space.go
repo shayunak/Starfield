@@ -296,6 +296,7 @@ func startSpace(space ISpace, wg *sync.WaitGroup) {
 		index, value, _ := reflect.Select(selectDevicesCases)
 		simulationEvent := value.Interface().(SimulationEvent)
 		space.ProcessEvent(simulationEvent, index)
+		println("Remaining packets Unprocessed Packets: ", space.GetRemainingUnprocessedPackets())
 	}
 	space.CloseChannels()
 	space.logSimulationSummary()
