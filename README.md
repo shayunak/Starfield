@@ -11,6 +11,8 @@ The following project is a packet-level routing multi-process simulator for Low 
 2. [Pyhton 3.7.2](https://www.python.org/downloads/release/python-372/)
 3. [NetworkX](https://networkx.org/)
 4. [Pandas](https://pandas.pydata.org/)
+5. [Numpy](https://numpy.org/)
+6. [Matplotlib](https://matplotlib.org/)
 
 ## Input Files
 1. **Ground Station Locations:** The file should be located in the `./configs` folder. The file has a _CSV_ format with the following column structure: ``Id,Latitude,Longitude``, where `Id` is the unique name of the ground station, `Latitude` is the latitude of the corresponding ground station, and `Longitude` is the longitude for the corresponding ground station.
