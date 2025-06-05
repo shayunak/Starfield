@@ -51,7 +51,7 @@ where each pair containing an edge of the inter-satellite static topology. It is
   }</code> <br>
   The `name` field refers to constellation's name, e.g. "Starlink". The rest of the structure can be split in two section:
   ### orbit_config:
-  - **`earth_radius`:** A constant refering to the Earth's radius, that should not be changed for a realistic Earth simulation.
+  - **`earth_radius(m)`:** A constant refering to the Earth's radius, that should not be changed for a realistic Earth simulation.
   - **`earth_rotation_period(rev/day)`:** A constant refering to the Earth's period in revolutions per day, that should not be changed for a realistic Earth simulation.
   - **`altitude(m)`:** The altitude of the satellites in a constellation's shell in meters, based on the Starlink v1 Shell 1 altitude (check [Everyday's Astronaut Website](https://everydayastronaut.com/starlink-group-6-15-falcon-9-block-5-2/).) Moreover, it should be synchornozied with `mean_motion_rev_per_day` due to dynamic Physics of gravity.
   - **`min_altitude_isl(m)`:** A constant refering to minimum altitude an inter-satellite connection can be achieved due to undeterministic atmospheric condition. It should not be changed for a realistic Earth simulation.
@@ -61,13 +61,13 @@ where each pair containing an edge of the inter-satellite static topology. It is
   - **`number_of_satellites_per_orbit`:** The number of satellites per orbit in the constellation's shell, based on the Starlink Phase v1 number of satellite's per orbit (Check [Everyday's Astronaut Website](https://everydayastronaut.com/starlink-group-6-15-falcon-9-block-5-2/).)
   - **`phase_diff_enabled`:** A true/false value that alternatively(odd, and even indexes of orbits) shift the first satellite for half a phase, creating an initial state modification in the distances for the simulator. 
   ### satellite_config:
-  - **`speed_of_light_vac`:** A constant refering to the speed of light in vaccum for wireless signal transmission, that should not be changed for a realistic Earth simulation.
+  - **`speed_of_light_vac(m/s)`:** A constant refering to the speed of light in vaccum for wireless signal transmission, that should not be changed for a realistic Earth simulation.
   - **`mean_motion_rev_per_day(rev/day)`:** Mean of satellite's period around the Earth in revolutions per day, that should be synchornozied with `altitude` due to dynamic Physics of gravity.
   - **`min_elevation_angle(degrees)`:** The minimum degree between the horizon, and the satellite-to-ground-station connecting line, controlling the quality of ground-to-satellite transmission due to the shadowing effect, and obstructions. The minimum degree should be $$5^{\circ}-10^{\circ}$$ according to the regulations (check [Cornell Law School Website](https://www.law.cornell.edu/cfr/text/47/25.205?utm_source=chatgpt.com);) however, for an efficient, and reliable transmission, $$30^{\circ}$$ is recommended.
   - **`number_of_isls`:** Number of inter-satellite links allowed for each satellite corresponding to Laser Communication Terminal. The number is 4 for Starlink V2 satellites (Check [Starlink Website](https://www.starlink.com/technology))
-  - **`isl_bandwidth, isl_link_noise_coef`:** Parameters tuned for distance-based calculation of the inter-satellite throughput based on Shannon's Law.
+  - **`isl_bandwidth(Symps), isl_link_noise_coef`:** Parameters tuned for distance-based calculation of the inter-satellite throughput based on Shannon's Law.
   - **`isl_acquisition_time(s)`:** Amount of time it takes to establish an inter-satellite connection in seconds. It is at least 10 seconds for Starlink satellites (Check [SpaceX presentation](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/12877/1287702/Achieving-99-link-uptime-on-a-fleet-of-100G-space/10.1117/12.3005057.short).)
-  - **`gsl_bandwidth, gsl_link_noise_coef`:** Parameters tuned for distance-based calculation of the ground-satellite throughput based on Shannon's Law.
+  - **`gsl_bandwidth(Symps), gsl_link_noise_coef`:** Parameters tuned for distance-based calculation of the ground-satellite throughput based on Shannon's Law.
   - **`max_packet_size(Kb)`:** Size of the network packets in Kb.
   - **`interface_buffer_size`:** Number of packets each interface can buffer in time before packet drop happens.
 ## Output Files
