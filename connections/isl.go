@@ -21,7 +21,7 @@ func (isl *ISL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 	connectedOrbit, connectedNum := helpers.GetOrbitAndSatelliteId(connectedId)
 	updatedDistance := isl.GeoCalculation.CalculateDistanceBySatelliteId(ownerNum, ownerOrbit, connectedNum, connectedOrbit, float64(timeStamp))
 	distanceKM := updatedDistance / 1000.0
-	isl.PropagationDelay = updatedDistance / isl.SpeedOfLightVAC
+	isl.PropagationDelay = 1000.0 * updatedDistance / isl.SpeedOfLightVAC
 	isl.Bitrate = isl.Bandwidth * math.Log2(1+isl.LinkNoiseCoef/math.Pow(distanceKM, 2))
 	return isl.isLinkOutOfRange(updatedDistance)
 }

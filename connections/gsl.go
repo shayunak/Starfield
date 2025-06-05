@@ -42,7 +42,7 @@ func (gsl *GSL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 		}
 	}
 	distanceKM := updatedDistance / 1000.0
-	gsl.PropagationDelay = updatedDistance / gsl.SpeedOfLightVAC
+	gsl.PropagationDelay = 1000.0 * updatedDistance / gsl.SpeedOfLightVAC
 	gsl.Bitrate = gsl.Bandwidth * math.Log2(1+gsl.LinkNoiseCoef/math.Pow(distanceKM, 2))
 	return false
 }

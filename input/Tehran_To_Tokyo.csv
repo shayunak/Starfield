@@ -1,0 +1,4 @@
+Timestamp(ms),Source,Destination,Length(Mb)
+0,Tehran,Tokyo,10.0
+300,Tehran,Tokyo,10.0
+1100,Tokyo,Tehran,10.0
