@@ -75,13 +75,13 @@ where each pair containing an edge of the inter-satellite static topology. It is
   2. **Simulation Summary:** In the "simulation" mode, the simulator generates all the network events in the packet-level. The simulation summary output file will be located in the `./generated` folder. The file has a _CSV_ format with the following column structure: ``TimeStamp(ms),Event,FromDevice,ToDevice,PacketId``, where `Timestamp` is the amount of time in milliseconds since the beginning of the simulation, `Event` can be one of the "DELIVERED", "SEND", "RECEIVE", "DROP", "CONNECTION_ESTABLISHED", `(FromDevice,ToDevice)` are the pair of satellite-to-ground-station or satellite-to-satellite that the event is related to, `PacketId` is the unique identifier of each packet in the network. When the `Event` is "CONNECTION_ESTABLISHED", the `PacketId` value is -1, since the event is unrelated to packet forwarding.
 ## Shortest Path Calculator
 There are python files in the `./shortest_path_forwarding` folder to generate shortest path forwarding table using the all-pair Dijkstra algorithm. You can run the shortest path forwarding with the following commands; **Note that,** the distance file is expected to be at the `./generated` folder, and the topology file is expected to be at the `./input` folder:
-> `shortest_path_algorithm.py --dijkstra [distance file]`
+> `./shortest_path_forwarding/shortest_path_algorithm.py --dijkstra [distance file]`
 
-> `shortest_path_algorithm.py --dijkstra_grid_plus [distance file] [number of orbits] [number of satellites per orbit]`
+> `./shortest_path_forwarding/shortest_path_algorithm.py --dijkstra_grid_plus [distance file] [number of orbits] [number of satellites per orbit]`
 
-> `shortest_path_algorithm.py --dijkstra_static [distance file] [topology_file_static]`
+> `./shortest_path_forwarding/shortest_path_algorithm.py --dijkstra_static [distance file] [topology_file_static]`
 
-> `shortest_path_algorithm.py --dijkstra_dynamic [distance file] [topology_file_dynamic]`
+> `./shortest_path_forwarding/shortest_path_algorithm.py --dijkstra_dynamic [distance file] [topology_file_dynamic]`
 - **--dijkstra:** shortest path without any inter-satellite topology, based on the distance file only
 - **--dijkstra_grid_plus:** shortest path with grid plus inter-satellite topology, and the corresponding distances
 - **--dijkstra_static:** shortest path with a static inter-satellite topology, and the corresponding distances
