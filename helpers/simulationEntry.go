@@ -8,7 +8,6 @@ const EVENT_SENT string = "SEND"
 const EVENT_RECEIVED string = "RECEIVE"
 const EVENT_DELIVERED string = "DELIVERED"
 const EVENT_DROPPED string = "DROP"
-const EVENT_CONNECTION_ESTABLISHED string = "CONNECTION_ESTABLISHED"
 
 type SimulationEntryList []ISimulationEntry
 

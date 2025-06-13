@@ -63,18 +63,25 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	return anomalyCalc, groundCalc
 }
 
-func initSpace(space *actors.ISpace, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) {
-	*space = &actors.Space{
+func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) {
+	*logger = &actors.Logger{
 		TotalSimulationTime:         totalSimulationTime,
-		SpaceDeviceChannels:         nil,
-		DistancesSpaceChannels:      nil,
+		LoggerDeviceChannels:        nil,
+		DistancesLoggerChannels:     nil,
 		DeviceNames:                 nil,
-		InterfaceBufferSize:         config.SatelliteConfig.InterfaceBufferSize,
 		DistanceEntries:             make(helpers.DistanceEntryList, 0),
 		ConsellationName:            config.ConsellationName,
 		RemainingUnprocessedPackets: totalNumberOfPackets,
 		TimeStep:                    timeStep,
 		TimeStamp:                   0,
+	}
+}
+
+func initLinker(linker *actors.ILinker) {
+	*linker = &actors.Linker{
+		LinkChannels:       nil,
+		DeviceNames:        nil,
+		PendingConnections: make([]actors.LinkRequest, 0),
 	}
 }
 
@@ -89,7 +96,7 @@ func initTopology(satellites SatelliteList, entries map[string]map[string]connec
 func SetupSimulatorDistances(configFileName string, groundStationFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var groundStations GroundStationList
-	var space actors.ISpace
+	var logger actors.ILogger
 
 	// reading the config file
 	config := getConfig(configFileName)
@@ -98,7 +105,7 @@ func SetupSimulatorDistances(configFileName string, groundStationFileName string
 	anomalyCalc, groundCalc := initCalculators(config)
 
 	// initializing the actors
-	initSpace(&space, config, timeStep, totalSimulationTime, 0)
+	initLogger(&logger, config, timeStep, totalSimulationTime, 0)
 	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
 	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
 
@@ -106,15 +113,16 @@ func SetupSimulatorDistances(configFileName string, groundStationFileName string
 	channels := startDistancesSatellites(satellites)
 	channels = append(channels, startDistancesGroundStations(groundStations)...)
 
-	space.SetDistancesDeviceChannels(&channels)
-	space.RunDistances(simulationDone)
+	logger.SetDistancesDeviceChannels(&channels)
+	logger.RunDistances(simulationDone)
 }
 
 func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string, timeStep int,
 	totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var groundStations GroundStationList
-	var space actors.ISpace
+	var logger actors.ILogger
+	var linker actors.ILinker
 
 	// reading the config file
 	config := getConfig(configFileName)
@@ -143,8 +151,9 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 		}
 	}
 
-	// initializing the space
-	initSpace(&space, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	// initializing the Logger and  the Linker
+	initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	initLinker(&linker)
 
 	// bringing up the ISL topology
 	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
@@ -154,19 +163,23 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteChannels, satelliteNames := startSatellites(satellites)
-	groundStationChannels, groundStationNames := startGroundStations(groundStations)
-	channels := append(groundStationChannels, satelliteChannels...)
+	satelliteLogChannels, satelliteLinkChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationLinkChannels, groundStationNames := startGroundStations(groundStations)
+	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
+	linkChannels := append(groundStationLinkChannels, satelliteLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
-	space.SetDeviceChannels(&channels, names)
-	space.Run(simulationDone)
+	logger.SetDeviceChannels(&logChannels, names)
+	linker.SetDeviceChannels(&linkChannels, names)
+	logger.Run(simulationDone)
+	linker.Run()
 }
 
 func SetupForwardingSimulation(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string,
 	ISLTopologyFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
 	var groundStations GroundStationList
-	var space actors.ISpace
+	var logger actors.ILogger
+	var linker actors.ILinker
 
 	// reading the config file
 	config := getConfig(configFileName)
@@ -195,8 +208,9 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 		}
 	}
 
-	// initializing the space
-	initSpace(&space, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	// initializing the Logger and the Linker
+	initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	initLinker(&linker)
 
 	// bringing up the ISL topology
 	topologyPairs := GenerateISLTopology(ISLTopologyFileName)
@@ -206,10 +220,13 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteChannels, satelliteNames := startSatellites(satellites)
-	groundStationChannels, groundStationNames := startGroundStations(groundStations)
-	channels := append(groundStationChannels, satelliteChannels...)
+	satelliteLogChannels, satelliteLinkChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationLinkChannels, groundStationNames := startGroundStations(groundStations)
+	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
+	linkChannels := append(groundStationLinkChannels, satelliteLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
-	space.SetDeviceChannels(&channels, names)
-	space.Run(simulationDone)
+	logger.SetDeviceChannels(&logChannels, names)
+	linker.SetDeviceChannels(&linkChannels, names)
+	logger.Run(simulationDone)
+	linker.Run()
 }

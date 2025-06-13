@@ -30,11 +30,16 @@ type NetworkInterface struct {
 type INetworkInterface interface {
 	Send(packet Packet, timeOfEvent float64) (bool, bool, int)
 	Receive() []Event
+	HasReceiveChannel() bool
+	HasSendChannel() bool
 	GetDeviceConnectedTo() string
 	GetDeviceOwner() string
 	GetLink() ILink
-	ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet)
-	CloseConnection()
+	ChangeSendLink(newDeviceConnectedTo string, newSendChannel *chan Packet)
+	ChangeReceiveLink(newDeviceConnectedTo string, newReceiveChannel *chan Packet)
+	CloseSendSideConnection()
+	CloseReceiveSideConnection()
+	Clone() INetworkInterface
 }
 
 type ILink interface {
@@ -42,6 +47,27 @@ type ILink interface {
 	CalculateTransmissionTime(packet Packet) float64
 	UpdateDistance(ownerId string, connectedId string, timeStamp float64) bool
 	calculateBufferThresholdTime() float64
+	Clone() ILink
+}
+
+func (networkInterface *NetworkInterface) HasReceiveChannel() bool {
+	return networkInterface.ReceiveChannel != nil
+}
+
+func (networkInterface *NetworkInterface) HasSendChannel() bool {
+	return networkInterface.SendChannel != nil
+}
+
+func (networkInterface *NetworkInterface) Clone() INetworkInterface {
+	return &NetworkInterface{
+		InterfaceId:        networkInterface.InterfaceId,
+		InterfaceOwner:     networkInterface.InterfaceOwner,
+		SendChannel:        networkInterface.SendChannel,
+		ReceiveChannel:     networkInterface.ReceiveChannel,
+		Link:               networkInterface.Link.Clone(),
+		DeviceConnectedTo:  networkInterface.DeviceConnectedTo,
+		LastPacketSentTime: networkInterface.LastPacketSentTime,
+	}
 }
 
 func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, bool, int) {
@@ -58,7 +84,7 @@ func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float6
 	linkDown := networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*networkInterface.LastPacketSentTime)
 
 	if linkDown {
-		networkInterface.CloseConnection()
+		networkInterface.CloseSendSideConnection()
 		return true, false, int(packet.PacketSentTime) // packet dropped
 	}
 
@@ -75,11 +101,19 @@ func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float6
 	return false, false, int(packet.PacketSentTime) // packet sent
 }
 
-func (networkInterface *NetworkInterface) CloseConnection() {
-	networkInterface.DeviceConnectedTo = ""
+func (networkInterface *NetworkInterface) CloseSendSideConnection() {
 	close(*networkInterface.SendChannel)
 	networkInterface.SendChannel = nil
+	if networkInterface.ReceiveChannel == nil {
+		networkInterface.DeviceConnectedTo = ""
+	}
+}
+
+func (networkInterface *NetworkInterface) CloseReceiveSideConnection() {
 	networkInterface.ReceiveChannel = nil
+	if networkInterface.SendChannel == nil {
+		networkInterface.DeviceConnectedTo = ""
+	}
 }
 
 func (networkInterface *NetworkInterface) Receive() []Event {
@@ -89,9 +123,9 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 	for !channelEmpty {
 		select {
 		case packet, ok := <-*networkInterface.ReceiveChannel:
-			if !ok {
+			if !ok && (len(*networkInterface.ReceiveChannel) == 0) {
 				channelEmpty = true
-				networkInterface.CloseConnection()
+				networkInterface.CloseReceiveSideConnection()
 				break
 			}
 			networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packet.PacketSentTime)
@@ -102,7 +136,6 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 				Data:      &packet,
 			}
 			recievedEvents = append(recievedEvents, event)
-
 		default:
 			channelEmpty = true
 		}
@@ -119,15 +152,13 @@ func (networkInterface *NetworkInterface) GetDeviceOwner() string {
 	return networkInterface.InterfaceOwner
 }
 
-func (networkInterface *NetworkInterface) ChangeLink(newDeviceConnectedTo string, newSendChannel *chan Packet, newReceiveChannel *chan Packet) {
-	if networkInterface.DeviceConnectedTo == newDeviceConnectedTo {
-		return
-	}
-	if networkInterface.DeviceConnectedTo != "" {
-		networkInterface.CloseConnection()
-	}
+func (networkInterface *NetworkInterface) ChangeSendLink(newDeviceConnectedTo string, newSendChannel *chan Packet) {
 	networkInterface.DeviceConnectedTo = newDeviceConnectedTo
 	networkInterface.SendChannel = newSendChannel
+}
+
+func (networkInterface *NetworkInterface) ChangeReceiveLink(newDeviceConnectedTo string, newReceiveChannel *chan Packet) {
+	networkInterface.DeviceConnectedTo = newDeviceConnectedTo
 	networkInterface.ReceiveChannel = newReceiveChannel
 }
 

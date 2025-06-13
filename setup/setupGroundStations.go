@@ -91,25 +91,29 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
-func startGroundStations(groundStations GroundStationList) (actors.SpaceDeviceChannels, []string) {
-	channels := make(actors.SpaceDeviceChannels, 0)
+func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, []string) {
+	logChannels := make(actors.LoggerDeviceChannels, 0)
+	linkChannels := make(actors.LinkRequestChannels, 0)
 	groundStationNames := make([]string, 0)
 	for _, groundStation := range groundStations {
-		channel := make(actors.SpaceDeviceChannel)
-		channels = append(channels, &channel)
+		logChannel := make(actors.LoggerDeviceChannel)
+		linkChannel := make(actors.LinkRequestChannel, 1)
+		logChannels = append(logChannels, &logChannel)
+		linkChannels = append(linkChannels, &linkChannel)
 		groundStationNames = append(groundStationNames, groundStation.GetName())
-		groundStation.SetSpaceChannel(&channel)
+		groundStation.SetLoggerChannel(&logChannel)
+		groundStation.SetLinkerChannel(&linkChannel)
 		groundStation.Run()
 	}
-	return channels, groundStationNames
+	return logChannels, linkChannels, groundStationNames
 }
 
-func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceSpaceDeviceChannels {
-	channels := make(actors.DistanceSpaceDeviceChannels, 0)
+func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {
+	channels := make(actors.DistanceLoggerDeviceChannels, 0)
 	for _, groundStation := range groundStations {
-		channel := make(actors.DistanceSpaceDeviceChannel)
+		channel := make(actors.DistanceLoggerDeviceChannel)
 		channels = append(channels, &channel)
-		groundStation.SetDistanceSpaceChannel(&channel)
+		groundStation.SetDistanceLoggerChannel(&channel)
 		groundStation.RunDistances()
 	}
 	return channels

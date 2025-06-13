@@ -34,11 +34,15 @@ type Satellite struct {
 	EventQueue      connections.PriorityQueue
 
 	// Goroutines and connections, and channels
-	ISLInterfaces        []connections.INetworkInterface
-	AvailableISL         int
-	GSLInterface         connections.INetworkInterface
-	DistanceSpaceChannel *DistanceSpaceDeviceChannel
-	SpaceChannel         *SpaceDeviceChannel
+	InterfaceBufferSize   int
+	ISLInterfaces         []connections.INetworkInterface
+	AvailableISL          int
+	GSLInterfaceSample    connections.INetworkInterface
+	GSLInterfaces         map[string]connections.INetworkInterface
+	LinkerChannel         *LinkRequestChannel
+	DistanceLoggerChannel *DistanceLoggerDeviceChannel
+	LoggerChannel         *LoggerDeviceChannel
+	PendingConnections    []LinkRequest
 }
 
 type ISatellite interface {
@@ -48,27 +52,29 @@ type ISatellite interface {
 	getTotalSimulationTime() int
 	// Distance Mode
 	RunDistances()
-	GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel
-	SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel)
+	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
+	SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel)
 	updatePosition()
-	updateSpaceOnDistances()
+	logDistances()
 	nextTimeStep()
 	findSatellitesInRange() map[string]float64
 	findGroundStationsInRange() map[string]float64
 	// Simulation Mode
 	Run()
-	GetSpaceChannel() *SpaceDeviceChannel
-	SetSpaceChannel(channel *SpaceDeviceChannel)
+	SetLoggerChannel(channel *LoggerDeviceChannel)
+	SetLinkerChannel(channel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
-	AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
-	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	ReceiveFromInterfaces()
 	SendPackets()
-	CheckIncomingConnections() bool
+	CheckIncomingConnection()
+	SendPendingRequests()
+	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
+	findGSLConnection(toGroundStation string) connections.INetworkInterface
 	findAvailableISLInterfaceId() int
 	getISLInterfaceNames() []string
-	establishConnection(toGroundStation string, timeStamp int)
-	sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
+	establishGSLConnection(toGroundStation string) connections.INetworkInterface
+	establishSendChannel(inface connections.INetworkInterface)
+	logEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 }
 
 func (satellite *Satellite) GetName() string {
@@ -105,13 +111,16 @@ func NewSatellite(id int, orbitalPhase float64, dt int, totalSimulationTime int,
 		AnomalyCosinus: math.Cos(newSatellite.OrbitalAnomaly),
 	}
 	// Channels
+	newSatellite.InterfaceBufferSize = interfaceBufferSize
 	newSatellite.EventQueue = make(connections.PriorityQueue, 0)
 	heap.Init(&newSatellite.EventQueue)
 	newSatellite.AvailableISL = numberOfIsls
 	newSatellite.ISLInterfaces = connections.InitISLs(newSatellite.Name, numberOfIsls, speedOfLightVac, ISLBandwidth,
 		ISLLinkNoiseCoefficient, anomalyCalculations, maxPacketSize*float64(interfaceBufferSize))
-	newSatellite.GSLInterface = connections.InitGSL(newSatellite.Name, speedOfLightVac, GSLBandwidth, GSLLinkNoiseCoefficient, orbit,
+	newSatellite.GSLInterfaceSample = connections.InitGSL(newSatellite.Name, speedOfLightVac, GSLBandwidth, GSLLinkNoiseCoefficient, orbit,
 		newSatellite.OrbitalAnomaly, 0.0, newSatellite.AnomalyElements, groundStationCalculations, maxPacketSize*float64(interfaceBufferSize))
+	newSatellite.GSLInterfaces = make(map[string]connections.INetworkInterface)
+	newSatellite.PendingConnections = make([]LinkRequest, 0)
 
 	return &newSatellite
 }
@@ -123,12 +132,12 @@ func (satellite *Satellite) RunDistances() {
 	go startSatelliteDistances(satellite)
 }
 
-func (satellite *Satellite) GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel {
-	return satellite.DistanceSpaceChannel
+func (satellite *Satellite) GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel {
+	return satellite.DistanceLoggerChannel
 }
 
-func (satellite *Satellite) SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel) {
-	satellite.DistanceSpaceChannel = channel
+func (satellite *Satellite) SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel) {
+	satellite.DistanceLoggerChannel = channel
 }
 
 func (satellite *Satellite) updatePosition() {
@@ -153,40 +162,6 @@ func mergeMaps(satelliteMap map[string]float64, groundStationMap map[string]floa
 	return mergedMap
 }
 
-func (satellite *Satellite) updateSpaceOnDistances() {
-	satelliteDistances := satellite.findSatellitesInRange()
-	groundStationDistances := satellite.findGroundStationsInRange()
-
-	(*satellite.DistanceSpaceChannel) <- UpdateDistancesMessage{
-		DeviceName: satellite.Name,
-		TimeStamp:  satellite.TimeStamp,
-		Distances:  mergeMaps(satelliteDistances, groundStationDistances),
-	}
-}
-
-func startSatelliteDistances(mySatellite ISatellite) {
-	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
-		mySatellite.updateSpaceOnDistances()
-		mySatellite.nextTimeStep()
-		mySatellite.updatePosition()
-	}
-	close(*mySatellite.GetDistanceSpaceChannel())
-}
-
-//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
-
-func (satellite *Satellite) SetForwardingTable(forwardingTable map[int]ForwardingEntry) {
-	satellite.ForwardingTable = forwardingTable
-}
-
-func (satellite *Satellite) GetSpaceChannel() *SpaceDeviceChannel {
-	return satellite.SpaceChannel
-}
-
-func (satellite *Satellite) SetSpaceChannel(channel *SpaceDeviceChannel) {
-	satellite.SpaceChannel = channel
-}
-
 func (satellite *Satellite) findSatellitesInRange() map[string]float64 {
 	satelliteOrbitalAscension := satellite.Orbit.GetAscension()
 	lengthLimitRatio := satellite.AnomalyCalculations.GetLengthLimitRatio()
@@ -199,6 +174,40 @@ func (satellite *Satellite) findGroundStationsInRange() map[string]float64 {
 		satellite.Orbit)
 }
 
+func (satellite *Satellite) logDistances() {
+	satelliteDistances := satellite.findSatellitesInRange()
+	groundStationDistances := satellite.findGroundStationsInRange()
+
+	(*satellite.DistanceLoggerChannel) <- UpdateDistancesMessage{
+		DeviceName: satellite.Name,
+		TimeStamp:  satellite.TimeStamp,
+		Distances:  mergeMaps(satelliteDistances, groundStationDistances),
+	}
+}
+
+func startSatelliteDistances(mySatellite ISatellite) {
+	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
+		mySatellite.logDistances()
+		mySatellite.nextTimeStep()
+		mySatellite.updatePosition()
+	}
+	close(*mySatellite.GetDistanceLoggerChannel())
+}
+
+//////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
+
+func (satellite *Satellite) SetForwardingTable(forwardingTable map[int]ForwardingEntry) {
+	satellite.ForwardingTable = forwardingTable
+}
+
+func (satellite *Satellite) SetLoggerChannel(channel *LoggerDeviceChannel) {
+	satellite.LoggerChannel = channel
+}
+
+func (satellite *Satellite) SetLinkerChannel(channel *LinkRequestChannel) {
+	satellite.LinkerChannel = channel
+}
+
 func (satellite *Satellite) getISLInterfaceNames() []string {
 	satelliteNames := make([]string, len(satellite.ISLInterfaces))
 
@@ -206,6 +215,17 @@ func (satellite *Satellite) getISLInterfaceNames() []string {
 		satelliteNames[i] = satellite.ISLInterfaces[i].GetDeviceConnectedTo()
 	}
 	return satelliteNames
+}
+
+func (satellite *Satellite) AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet,
+	sendChannel *chan connections.Packet) bool {
+	if satellite.AvailableISL <= 0 {
+		return false
+	}
+	satellite.ISLInterfaces[id].ChangeSendLink(connectedDevice, sendChannel)
+	satellite.ISLInterfaces[id].ChangeReceiveLink(connectedDevice, receiveChannel)
+	satellite.AvailableISL--
+	return true
 }
 
 func (satellite *Satellite) findAvailableISLInterfaceId() int {
@@ -217,78 +237,81 @@ func (satellite *Satellite) findAvailableISLInterfaceId() int {
 	return -1
 }
 
-func (satellite *Satellite) AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet,
-	sendChannel *chan connections.Packet) bool {
-	if satellite.AvailableISL <= 0 {
-		return false
-	}
-	satellite.ISLInterfaces[id].ChangeLink(connectedDevice, sendChannel, receiveChannel)
-	satellite.AvailableISL--
-	return true
-}
-
-func (satellite *Satellite) AddISLConnection(connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool {
-	if satellite.AvailableISL <= 0 {
-		return false
-	}
-	interfaceIndex := satellite.findAvailableISLInterfaceId()
-	satellite.ISLInterfaces[interfaceIndex].ChangeLink(connectedDevice, sendChannel, receiveChannel)
-	satellite.AvailableISL--
-	return true
-}
-
 func (satellite *Satellite) Run() {
 	log.Default().Println("Running satellite: ", satellite.Id)
 	go startSatellite(satellite)
 }
 
 func startSatellite(mySatellite ISatellite) {
-	simulationDone := false
-	for !simulationDone {
-		simulationDone = mySatellite.CheckIncomingConnections()
+	for {
+		mySatellite.CheckIncomingConnection()
 		mySatellite.ReceiveFromInterfaces()
+		mySatellite.SendPendingRequests()
 		mySatellite.SendPackets()
 	}
 }
 
-func (satellite *Satellite) CheckIncomingConnections() bool {
+func (satellite *Satellite) CheckIncomingConnection() {
 	select {
-	case event, ok := <-*satellite.SpaceChannel:
-		if !ok {
-			return true
+	case linkReq := <-*satellite.LinkerChannel:
+		inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
+		if found {
+			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		} else {
+			newInterface := satellite.GSLInterfaceSample.Clone()
+			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+			satellite.GSLInterfaces[linkReq.FromDevice] = newInterface
 		}
-		if event.EventType == SIMULATION_EVENT_CONNECTION_ESTABLISHED {
-			satellite.GSLInterface.ChangeLink(event.ToDevice, event.LinkReq.SendChannel, event.LinkReq.RecieveChannel)
-		}
-		return false
 	default:
-		return false
+		return
+	}
+}
+
+func (satellite *Satellite) SendPendingRequests() {
+	indx := 0
+	for indx < len(satellite.PendingConnections) {
+		select {
+		case *satellite.LinkerChannel <- satellite.PendingConnections[indx]:
+			satellite.PendingConnections = append(satellite.PendingConnections[:indx], satellite.PendingConnections[indx+1:]...)
+		default:
+			indx++
+		}
 	}
 }
 
 func (satellite *Satellite) ReceiveFromInterfaces() {
-	for _, inface := range satellite.ISLInterfaces {
+	for indx, inface := range satellite.ISLInterfaces {
 		if inface.GetDeviceConnectedTo() != "" {
-			receivedEvents := inface.Receive()
-			for _, event := range receivedEvents {
-				item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
-				heap.Push(&satellite.EventQueue, &item)
-				satellite.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
+			if inface.HasReceiveChannel() {
+				receivedEvents := inface.Receive()
+				for _, event := range receivedEvents {
+					item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+					heap.Push(&satellite.EventQueue, &item)
+					satellite.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
+				}
 			}
+		} else {
+			satellite.ISLInterfaces = append(satellite.ISLInterfaces[:indx], satellite.ISLInterfaces[indx+1:]...)
 		}
 	}
-	if satellite.GSLInterface.GetDeviceConnectedTo() != "" {
-		receivedEvents := satellite.GSLInterface.Receive()
-		for _, event := range receivedEvents {
-			item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
-			heap.Push(&satellite.EventQueue, &item)
-			satellite.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, satellite.GSLInterface.GetDeviceConnectedTo(), satellite.Name)
+	for gsName, inface := range satellite.GSLInterfaces {
+		if inface.GetDeviceConnectedTo() != "" {
+			if inface.HasReceiveChannel() {
+				receivedEvents := inface.Receive()
+				for _, event := range receivedEvents {
+					item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+					heap.Push(&satellite.EventQueue, &item)
+					satellite.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
+				}
+			}
+		} else {
+			delete(satellite.GSLInterfaces, gsName)
 		}
 	}
 }
 
-func (satellite *Satellite) sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcDevice string, destDevice string) {
-	*satellite.SpaceChannel <- SimulationEvent{
+func (satellite *Satellite) logEvent(timeStamp int, eventType int, packet *connections.Packet, srcDevice string, destDevice string) {
+	*satellite.LoggerChannel <- SimulationEvent{
 		TimeStamp:  timeStamp,
 		EventType:  eventType,
 		FromDevice: srcDevice,
@@ -297,17 +320,54 @@ func (satellite *Satellite) sendEvent(timeStamp int, eventType int, packet *conn
 	}
 }
 
-func (satellite *Satellite) establishConnection(toGroundStation string, timeStamp int) {
-	*satellite.SpaceChannel <- SimulationEvent{
-		TimeStamp:  timeStamp,
-		EventType:  SIMULATION_EVENT_CONNECTION_ESTABLISHED,
-		FromDevice: satellite.Name,
-		ToDevice:   toGroundStation,
-		Packet:     nil,
-		LinkReq:    nil,
+func (satellite *Satellite) findGSLConnection(toGroundStation string) connections.INetworkInterface {
+	inface, ok := satellite.GSLInterfaces[toGroundStation]
+	if ok {
+		if inface.HasSendChannel() {
+			return inface
+		} else {
+			satellite.establishSendChannel(inface)
+			return inface
+		}
+	} else {
+		return satellite.establishGSLConnection(toGroundStation)
 	}
-	connectionEvent := <-*satellite.SpaceChannel
-	satellite.GSLInterface.ChangeLink(connectionEvent.ToDevice, connectionEvent.LinkReq.SendChannel, connectionEvent.LinkReq.RecieveChannel)
+}
+
+func (satellite *Satellite) establishSendChannel(inface connections.INetworkInterface) {
+	sendChannel := make(chan connections.Packet, satellite.InterfaceBufferSize)
+	inface.ChangeSendLink(inface.GetDeviceConnectedTo(), &sendChannel)
+	linkRequest := LinkRequest{
+		ToDevice:    inface.GetDeviceConnectedTo(),
+		FromDevice:  satellite.Name,
+		SendChannel: &sendChannel,
+	}
+	select {
+	case *satellite.LinkerChannel <- linkRequest:
+		return
+	default:
+		satellite.PendingConnections = append(satellite.PendingConnections, linkRequest)
+	}
+}
+
+func (satellite *Satellite) establishGSLConnection(toGroundStation string) connections.INetworkInterface {
+	newNetworkInterface := satellite.GSLInterfaceSample.Clone()
+	satellite.GSLInterfaces[toGroundStation] = newNetworkInterface
+	sendChannel := make(chan connections.Packet, satellite.InterfaceBufferSize)
+	newNetworkInterface.ChangeSendLink(toGroundStation, &sendChannel)
+	linkRequest := LinkRequest{
+		ToDevice:    toGroundStation,
+		FromDevice:  satellite.Name,
+		SendChannel: &sendChannel,
+	}
+	select {
+	case *satellite.LinkerChannel <- linkRequest:
+		return newNetworkInterface
+	default:
+		satellite.PendingConnections = append(satellite.PendingConnections, linkRequest)
+	}
+
+	return newNetworkInterface
 }
 
 func (satellite *Satellite) SendPackets() {
@@ -323,25 +383,23 @@ func (satellite *Satellite) SendPackets() {
 				if interfaceId != -1 {
 					packetDropped, packetBuffered, timeOfAttempt := satellite.ISLInterfaces[interfaceId].Send(packet, itemPopped.Value.TimeStamp)
 					if !packetDropped && !packetBuffered {
-						satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
+						satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
 					} else if packetDropped {
-						satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
+						satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
 					} else if packetBuffered {
 						heap.Push(&satellite.EventQueue, itemPopped)
 						break
 					}
 				} else {
-					satellite.sendEvent(timeStamp, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
+					satellite.logEvent(timeStamp, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceId].GetDeviceConnectedTo())
 				}
 			} else {
-				if satellite.GSLInterface.GetDeviceConnectedTo() != forwardingChoice {
-					satellite.establishConnection(forwardingChoice, timeStamp)
-				}
-				packetDropped, packetBuffered, timeOfAttempt := satellite.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
+				connection := satellite.findGSLConnection(forwardingChoice)
+				packetDropped, packetBuffered, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
 				if !packetDropped && !packetBuffered {
-					satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.GSLInterface.GetDeviceConnectedTo())
+					satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, connection.GetDeviceConnectedTo())
 				} else if packetDropped {
-					satellite.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.GSLInterface.GetDeviceConnectedTo())
+					satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, connection.GetDeviceConnectedTo())
 				} else if packetBuffered {
 					heap.Push(&satellite.EventQueue, itemPopped)
 					break

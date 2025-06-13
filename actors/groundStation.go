@@ -35,9 +35,13 @@ type GroundStation struct {
 	EventQueue      connections.PriorityQueue
 
 	// Goroutines and connections, and channels
-	GSLInterface         connections.INetworkInterface
-	DistanceSpaceChannel *DistanceSpaceDeviceChannel
-	SpaceChannel         *SpaceDeviceChannel
+	InterfaceBufferSize   int
+	GSLInterfaceSample    connections.INetworkInterface
+	GSLInterfaces         map[string]connections.INetworkInterface
+	DistanceLoggerChannel *DistanceLoggerDeviceChannel
+	LoggerChannel         *LoggerDeviceChannel
+	LinkerChannel         *LinkRequestChannel
+	PendingConnections    []LinkRequest
 }
 
 type IGroundStation interface {
@@ -48,21 +52,24 @@ type IGroundStation interface {
 	RunDistances()
 	nextTimeStep()
 	updatePosition()
-	updateSpaceOnDistances()
-	SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel)
-	GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel
+	logDistances()
+	SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel)
+	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
 	// Simulation Mode
 	Run()
-	GetSpaceChannel() *SpaceDeviceChannel
-	SetSpaceChannel(channel *SpaceDeviceChannel)
+	SetLoggerChannel(channel *LoggerDeviceChannel)
+	SetLinkerChannel(channel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) int
 	ReceiveFromInterfaces()
 	SendPackets()
-	CheckIncomingConnections() bool
+	CheckIncomingConnection()
+	SendPendingRequests()
 	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) []connections.Packet
-	sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
-	establishConnection(toSatellite string, timeStamp int)
+	logEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
+	findConnection(toSatellite string) connections.INetworkInterface
+	establishConnection(toSatellite string) connections.INetworkInterface
+	establishSendChannel(inface connections.INetworkInterface)
 }
 
 func (gs *GroundStation) GetName() string {
@@ -98,9 +105,12 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.HeadPointAnomalyEl = headPointAnomalyEl
 
 	// Channels
+	newGS.InterfaceBufferSize = interfaceBufferSize
 	newGS.EventQueue = make(connections.PriorityQueue, 0)
-	newGS.GSLInterface = connections.InitGSL(newGS.Name, speedOfLightVac, bandwidth, linkNoiseCoefficient, nil, 0.0,
+	newGS.GSLInterfaceSample = connections.InitGSL(newGS.Name, speedOfLightVac, bandwidth, linkNoiseCoefficient, nil, 0.0,
 		headPointAscension, headPointAnomalyEl, groundStationCalculation, maxPacketSize*float64(interfaceBufferSize))
+	newGS.GSLInterfaces = make(map[string]connections.INetworkInterface)
+	newGS.PendingConnections = make([]LinkRequest, 0)
 
 	return &newGS
 }
@@ -112,12 +122,12 @@ func (gs *GroundStation) RunDistances() {
 	go startGSDistances(gs)
 }
 
-func (gs *GroundStation) SetDistanceSpaceChannel(channel *DistanceSpaceDeviceChannel) {
-	gs.DistanceSpaceChannel = channel
+func (gs *GroundStation) SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel) {
+	gs.DistanceLoggerChannel = channel
 }
 
-func (gs *GroundStation) GetDistanceSpaceChannel() *DistanceSpaceDeviceChannel {
-	return gs.DistanceSpaceChannel
+func (gs *GroundStation) GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel {
+	return gs.DistanceLoggerChannel
 }
 
 func (gs *GroundStation) nextTimeStep() {
@@ -129,8 +139,8 @@ func (gs *GroundStation) updatePosition() {
 	gs.HeadPointAscension = gs.GSCalculation.UpdatePosition(gs.HeadPointAscension, dt)
 }
 
-func (gs *GroundStation) updateSpaceOnDistances() {
-	(*gs.DistanceSpaceChannel) <- UpdateDistancesMessage{
+func (gs *GroundStation) logDistances() {
+	(*gs.DistanceLoggerChannel) <- UpdateDistancesMessage{
 		DeviceName: gs.Name,
 		TimeStamp:  gs.TimeStamp,
 		Distances: gs.GSCalculation.FindSatellitesInRange(gs.Name, gs.HeadPointAscension, gs.HeadPointAnomalyEl,
@@ -140,11 +150,11 @@ func (gs *GroundStation) updateSpaceOnDistances() {
 
 func startGSDistances(myGS IGroundStation) {
 	for myGS.getTimeStamp() <= myGS.getTotalSimulationTime() {
-		myGS.updateSpaceOnDistances()
+		myGS.logDistances()
 		myGS.nextTimeStep()
 		myGS.updatePosition()
 	}
-	close(*myGS.GetDistanceSpaceChannel())
+	close(*myGS.GetDistanceLoggerChannel())
 }
 
 //////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
@@ -153,12 +163,12 @@ func (gs *GroundStation) SetForwardingTable(forwardingTable map[int]ForwardingEn
 	gs.ForwardingTable = forwardingTable
 }
 
-func (gs *GroundStation) GetSpaceChannel() *SpaceDeviceChannel {
-	return gs.SpaceChannel
+func (gs *GroundStation) SetLoggerChannel(channel *LoggerDeviceChannel) {
+	gs.LoggerChannel = channel
 }
 
-func (gs *GroundStation) SetSpaceChannel(channel *SpaceDeviceChannel) {
-	gs.SpaceChannel = channel
+func (gs *GroundStation) SetLinkerChannel(channel *LinkRequestChannel) {
+	gs.LinkerChannel = channel
 }
 
 func (gs *GroundStation) Run() {
@@ -209,18 +219,24 @@ func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, max
 }
 
 func (gs *GroundStation) ReceiveFromInterfaces() {
-	if gs.GSLInterface.GetDeviceConnectedTo() != "" {
-		receivedEvents := gs.GSLInterface.Receive()
-		for _, event := range receivedEvents {
-			item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
-			heap.Push(&gs.EventQueue, &item)
-			gs.sendEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, gs.GSLInterface.GetDeviceConnectedTo(), gs.Name)
+	for gsName, inface := range gs.GSLInterfaces {
+		if inface.GetDeviceConnectedTo() != "" {
+			if inface.HasReceiveChannel() {
+				receivedEvents := inface.Receive()
+				for _, event := range receivedEvents {
+					item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+					heap.Push(&gs.EventQueue, &item)
+					gs.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), gs.Name)
+				}
+			}
+		} else {
+			delete(gs.GSLInterfaces, gsName)
 		}
 	}
 }
 
-func (gs *GroundStation) sendEvent(timeStamp int, eventType int, packet *connections.Packet, srcDevice string, destDevice string) {
-	*gs.SpaceChannel <- SimulationEvent{
+func (gs *GroundStation) logEvent(timeStamp int, eventType int, packet *connections.Packet, srcDevice string, destDevice string) {
+	*gs.LoggerChannel <- SimulationEvent{
 		TimeStamp:  timeStamp,
 		EventType:  eventType,
 		FromDevice: srcDevice,
@@ -229,17 +245,54 @@ func (gs *GroundStation) sendEvent(timeStamp int, eventType int, packet *connect
 	}
 }
 
-func (gs *GroundStation) establishConnection(toSatellite string, timeStamp int) {
-	*gs.SpaceChannel <- SimulationEvent{
-		TimeStamp:  timeStamp,
-		EventType:  SIMULATION_EVENT_CONNECTION_ESTABLISHED,
-		FromDevice: gs.Name,
-		ToDevice:   toSatellite,
-		Packet:     nil,
-		LinkReq:    nil,
+func (gs *GroundStation) findConnection(toSatellite string) connections.INetworkInterface {
+	inface, ok := gs.GSLInterfaces[toSatellite]
+	if ok {
+		if inface.HasSendChannel() {
+			return inface
+		} else {
+			gs.establishSendChannel(inface)
+			return inface
+		}
+	} else {
+		return gs.establishConnection(toSatellite)
 	}
-	connectionEvent := <-*gs.SpaceChannel
-	gs.GSLInterface.ChangeLink(connectionEvent.ToDevice, connectionEvent.LinkReq.SendChannel, connectionEvent.LinkReq.RecieveChannel)
+}
+
+func (gs *GroundStation) establishSendChannel(inface connections.INetworkInterface) {
+	sendChannel := make(chan connections.Packet, gs.InterfaceBufferSize)
+	inface.ChangeSendLink(inface.GetDeviceConnectedTo(), &sendChannel)
+	linkRequest := LinkRequest{
+		ToDevice:    inface.GetDeviceConnectedTo(),
+		FromDevice:  gs.Name,
+		SendChannel: &sendChannel,
+	}
+	select {
+	case *gs.LinkerChannel <- linkRequest:
+		return
+	default:
+		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
+	}
+}
+
+func (gs *GroundStation) establishConnection(toSatellite string) connections.INetworkInterface {
+	newNetworkInterface := gs.GSLInterfaceSample.Clone()
+	gs.GSLInterfaces[toSatellite] = newNetworkInterface
+	sendChannel := make(chan connections.Packet, gs.InterfaceBufferSize)
+	newNetworkInterface.ChangeSendLink(toSatellite, &sendChannel)
+	linkRequest := LinkRequest{
+		ToDevice:    toSatellite,
+		FromDevice:  gs.Name,
+		SendChannel: &sendChannel,
+	}
+	select {
+	case *gs.LinkerChannel <- linkRequest:
+		return newNetworkInterface
+	default:
+		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
+	}
+
+	return newNetworkInterface
 }
 
 func (gs *GroundStation) SendPackets() {
@@ -251,45 +304,56 @@ func (gs *GroundStation) SendPackets() {
 			if packet.Destination != gs.Name {
 				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
 				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
-				if gs.GSLInterface.GetDeviceConnectedTo() != forwardingSatellite {
-					gs.establishConnection(forwardingSatellite, timeStamp)
-				}
-				packetDropped, packetBuffered, timeOfAttempt := gs.GSLInterface.Send(packet, itemPopped.Value.TimeStamp)
+				connection := gs.findConnection(forwardingSatellite)
+				packetDropped, packetBuffered, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
 				if !packetDropped && !packetBuffered {
-					gs.sendEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, gs.Name, gs.GSLInterface.GetDeviceConnectedTo())
+					gs.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, gs.Name, connection.GetDeviceConnectedTo())
 				} else if packetDropped {
-					gs.sendEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, gs.Name, gs.GSLInterface.GetDeviceConnectedTo())
+					gs.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, gs.Name, connection.GetDeviceConnectedTo())
 				} else if packetBuffered {
 					heap.Push(&gs.EventQueue, itemPopped)
 					break
 				}
 			} else {
-				gs.sendEvent(int(itemPopped.Value.TimeStamp), SIMULATION_EVENT_DELIVERED, itemPopped.Value.Data, packet.Source, packet.Destination)
+				gs.logEvent(int(itemPopped.Value.TimeStamp), SIMULATION_EVENT_DELIVERED, itemPopped.Value.Data, packet.Source, packet.Destination)
 			}
 		}
 	}
 }
 
-func (gs *GroundStation) CheckIncomingConnections() bool {
+func (gs *GroundStation) CheckIncomingConnection() {
 	select {
-	case event, ok := <-*gs.SpaceChannel:
-		if !ok {
-			return true
+	case linkReq := <-*gs.LinkerChannel:
+		inface, found := gs.GSLInterfaces[linkReq.FromDevice]
+		if found {
+			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		} else {
+			newInterface := gs.GSLInterfaceSample.Clone()
+			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+			gs.GSLInterfaces[linkReq.FromDevice] = newInterface
 		}
-		if event.EventType == SIMULATION_EVENT_CONNECTION_ESTABLISHED {
-			gs.GSLInterface.ChangeLink(event.ToDevice, event.LinkReq.SendChannel, event.LinkReq.RecieveChannel)
-		}
-		return false
 	default:
-		return false
+		return
+	}
+}
+
+func (gs *GroundStation) SendPendingRequests() {
+	indx := 0
+	for indx < len(gs.PendingConnections) {
+		select {
+		case *gs.LinkerChannel <- gs.PendingConnections[indx]:
+			gs.PendingConnections = append(gs.PendingConnections[:indx], gs.PendingConnections[indx+1:]...)
+		default:
+			indx++
+		}
 	}
 }
 
 func startGS(myGS IGroundStation) {
-	simulationDone := false
-	for !simulationDone {
-		simulationDone = myGS.CheckIncomingConnections()
+	for {
+		myGS.CheckIncomingConnection()
 		myGS.ReceiveFromInterfaces()
+		myGS.SendPendingRequests()
 		myGS.SendPackets()
 	}
 }

@@ -86,3 +86,16 @@ func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoise
 		LastPacketSentTime: 0,
 	}
 }
+
+func (gsl *GSL) Clone() ILink {
+	return &GSL{
+		SpeedOfLightVAC:  gsl.SpeedOfLightVAC,
+		Bitrate:          gsl.Bitrate,
+		PropagationDelay: gsl.PropagationDelay,
+		Bandwidth:        gsl.Bandwidth,
+		LinkNoiseCoef:    gsl.LinkNoiseCoef,
+		BufferSize:       gsl.BufferSize,
+		GeoCalculation:   gsl.GeoCalculation,
+		GeometricSpec:    gsl.GeometricSpec,
+	}
+}

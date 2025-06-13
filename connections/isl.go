@@ -59,3 +59,15 @@ func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, 
 	}
 	return islList
 }
+
+func (isl *ISL) Clone() ILink {
+	return &ISL{
+		SpeedOfLightVAC:  isl.SpeedOfLightVAC,
+		Bitrate:          isl.Bitrate,
+		PropagationDelay: isl.PropagationDelay,
+		Bandwidth:        isl.Bandwidth,
+		LinkNoiseCoef:    isl.LinkNoiseCoef,
+		BufferSize:       isl.BufferSize,
+		GeoCalculation:   isl.GeoCalculation,
+	}
+}
