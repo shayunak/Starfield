@@ -60,8 +60,9 @@ func loadTrafficOnNodes(generatorFile string, groundStations *GroundStationList,
 	for _, gs := range *groundStations {
 		sourceEntry, isPresent := trafficMatrix[gs.GetName()]
 		if isPresent {
-			totalNumberOfPackets += gs.GenerateTraffic(packetId, sourceEntry, maxPacketSize)
-			packetId += totalNumberOfPackets
+			numberOfPackets, newId := gs.GenerateTraffic(packetId, sourceEntry, maxPacketSize)
+			packetId = newId
+			totalNumberOfPackets += numberOfPackets
 		}
 	}
 

@@ -31,7 +31,7 @@ func (isl *ISL) isLinkOutOfRange(distance float64) bool {
 }
 
 func (isl *ISL) CalculateDeliveryTime(packet Packet) float64 {
-	return isl.PropagationDelay + float64(packet.Length)/isl.Bitrate
+	return isl.PropagationDelay + packet.Length/isl.Bitrate
 }
 
 func (isl *ISL) calculateBufferThresholdTime() float64 {

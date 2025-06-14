@@ -48,7 +48,7 @@ func (gsl *GSL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 }
 
 func (gsl *GSL) CalculateDeliveryTime(packet Packet) float64 {
-	return gsl.PropagationDelay + float64(packet.Length)/gsl.Bitrate
+	return gsl.PropagationDelay + packet.Length/gsl.Bitrate
 }
 
 func (gsl *GSL) CalculateTransmissionTime(packet Packet) float64 {

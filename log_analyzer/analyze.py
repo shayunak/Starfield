@@ -5,7 +5,7 @@ import pandas as pd
 # Command line help
 def printHelp():
     print("log_analyzer/analyze.py --help")
-    print("log_analyzer/analyze.py [CSV file name].csv")
+    print("log_analyzer/analyze.py [Simulation Log]")
 
 
 # Calculate lantnecy

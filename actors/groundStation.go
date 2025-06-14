@@ -60,16 +60,16 @@ type IGroundStation interface {
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetLinkerChannel(channel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
-	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) int
+	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int)
 	ReceiveFromInterfaces()
 	SendPackets()
 	CheckIncomingConnection()
 	SendPendingRequests()
-	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) []connections.Packet
+	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) ([]connections.Packet, int)
 	logEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 	findConnection(toSatellite string) connections.INetworkInterface
 	establishConnection(toSatellite string) connections.INetworkInterface
-	establishSendChannel(inface connections.INetworkInterface)
+	establishSendChannel(inface connections.INetworkInterface, toSatellite string)
 }
 
 func (gs *GroundStation) GetName() string {
@@ -176,8 +176,8 @@ func (gs *GroundStation) Run() {
 	go startGS(gs)
 }
 
-func (gs *GroundStation) generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) []connections.Packet {
-	numberOfPackets := int(math.Ceil(1000 * entry.Length / maxPacketSize))
+func (gs *GroundStation) generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) ([]connections.Packet, int) {
+	numberOfPackets := int(math.Ceil(1000.0 * entry.Length / maxPacketSize))
 	packets := make([]connections.Packet, numberOfPackets)
 
 	for i := 0; i < numberOfPackets; i++ {
@@ -189,16 +189,16 @@ func (gs *GroundStation) generatePackets(fromId int, maxPacketSize float64, entr
 			PacketSentTime: float64(entry.TimeStamp),
 		}
 	}
-	return packets
+	return packets, numberOfPackets
 }
 
-func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) int {
-	number_of_packets := 0
-	id_assigned := fromId
+func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int) {
+	totalNumberOfPackets := 0
+	idAssigned := fromId
 	for _, entry := range traffic {
-		packets := gs.generatePackets(id_assigned, maxPacketSize, entry)
-		number_of_packets += len(packets)
-		id_assigned += len(packets)
+		packets, numberOfPackets := gs.generatePackets(idAssigned, maxPacketSize, entry)
+		totalNumberOfPackets += numberOfPackets
+		idAssigned += numberOfPackets
 		for index, packet := range packets {
 			event := connections.Event{
 				TimeStamp: float64(entry.TimeStamp),
@@ -215,7 +215,7 @@ func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, max
 	}
 	heap.Init(&gs.EventQueue)
 
-	return number_of_packets
+	return totalNumberOfPackets, idAssigned
 }
 
 func (gs *GroundStation) ReceiveFromInterfaces() {
@@ -251,7 +251,7 @@ func (gs *GroundStation) findConnection(toSatellite string) connections.INetwork
 		if inface.HasSendChannel() {
 			return inface
 		} else {
-			gs.establishSendChannel(inface)
+			gs.establishSendChannel(inface, toSatellite)
 			return inface
 		}
 	} else {
@@ -259,16 +259,17 @@ func (gs *GroundStation) findConnection(toSatellite string) connections.INetwork
 	}
 }
 
-func (gs *GroundStation) establishSendChannel(inface connections.INetworkInterface) {
+func (gs *GroundStation) establishSendChannel(inface connections.INetworkInterface, toSatellite string) {
 	sendChannel := make(chan connections.Packet, gs.InterfaceBufferSize)
-	inface.ChangeSendLink(inface.GetDeviceConnectedTo(), &sendChannel)
+	inface.ChangeSendLink(toSatellite, &sendChannel)
 	linkRequest := LinkRequest{
-		ToDevice:    inface.GetDeviceConnectedTo(),
+		ToDevice:    toSatellite,
 		FromDevice:  gs.Name,
 		SendChannel: &sendChannel,
 	}
 	select {
 	case *gs.LinkerChannel <- linkRequest:
+		println("Link request sent for send channel: ", linkRequest.FromDevice, " to ", linkRequest.ToDevice)
 		return
 	default:
 		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
@@ -287,6 +288,7 @@ func (gs *GroundStation) establishConnection(toSatellite string) connections.INe
 	}
 	select {
 	case *gs.LinkerChannel <- linkRequest:
+		println("Link request sent new: ", linkRequest.FromDevice, " to ", linkRequest.ToDevice)
 		return newNetworkInterface
 	default:
 		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
@@ -304,6 +306,7 @@ func (gs *GroundStation) SendPackets() {
 			if packet.Destination != gs.Name {
 				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
 				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
+				//print("sending data from ", gs.Name, " to ", forwardingSatellite, "\n")
 				connection := gs.findConnection(forwardingSatellite)
 				packetDropped, packetBuffered, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
 				if !packetDropped && !packetBuffered {

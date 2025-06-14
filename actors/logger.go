@@ -246,7 +246,7 @@ func startLogger(logger ILogger, wg *sync.WaitGroup) {
 		index, value, _ := reflect.Select(selectDevicesCases)
 		simulationEvent := value.Interface().(SimulationEvent)
 		logger.ProcessEvent(simulationEvent, index)
-		println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
+		//println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 	}
 	logger.CloseChannels()
 	logger.logSimulationSummary()
