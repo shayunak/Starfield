@@ -59,21 +59,24 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	}
 }
 
-func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, []string) {
+func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, []string) {
 	logChannels := make(actors.LoggerDeviceChannels, 0)
-	linkChannels := make(actors.LinkRequestChannels, 0)
+	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
+	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	satelliteNames := make([]string, 0)
 	for _, satellite := range satellites {
 		logChannel := make(actors.LoggerDeviceChannel)
-		linkChannel := make(actors.LinkRequestChannel, 1)
+		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
+		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
-		linkChannels = append(linkChannels, &linkChannel)
+		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
+		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		satelliteNames = append(satelliteNames, satellite.GetName())
 		satellite.SetLoggerChannel(&logChannel)
-		satellite.SetLinkerChannel(&linkChannel)
+		satellite.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		satellite.Run()
 	}
-	return logChannels, linkChannels, satelliteNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, satelliteNames
 }
 
 func startDistancesSatellites(satellites SatelliteList) actors.DistanceLoggerDeviceChannels {

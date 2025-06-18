@@ -40,7 +40,8 @@ type GroundStation struct {
 	GSLInterfaces         map[string]connections.INetworkInterface
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
-	LinkerChannel         *LinkRequestChannel
+	LinkerOutgoingChannel *LinkRequestChannel
+	LinkerIncomingChannel *LinkRequestChannel
 	PendingConnections    []LinkRequest
 }
 
@@ -56,9 +57,10 @@ type IGroundStation interface {
 	SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel)
 	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
 	// Simulation Mode
+	GetNumberOfPackets() int
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
-	SetLinkerChannel(channel *LinkRequestChannel)
+	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int)
 	ReceiveFromInterfaces()
@@ -163,12 +165,17 @@ func (gs *GroundStation) SetForwardingTable(forwardingTable map[int]ForwardingEn
 	gs.ForwardingTable = forwardingTable
 }
 
+func (gs *GroundStation) GetNumberOfPackets() int {
+	return gs.EventQueue.Len()
+}
+
 func (gs *GroundStation) SetLoggerChannel(channel *LoggerDeviceChannel) {
 	gs.LoggerChannel = channel
 }
 
-func (gs *GroundStation) SetLinkerChannel(channel *LinkRequestChannel) {
-	gs.LinkerChannel = channel
+func (gs *GroundStation) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
+	gs.LinkerIncomingChannel = ingoingChannel
+	gs.LinkerOutgoingChannel = outgoingChannel
 }
 
 func (gs *GroundStation) Run() {
@@ -268,8 +275,7 @@ func (gs *GroundStation) establishSendChannel(inface connections.INetworkInterfa
 		SendChannel: &sendChannel,
 	}
 	select {
-	case *gs.LinkerChannel <- linkRequest:
-		println("Link request sent for send channel: ", linkRequest.FromDevice, " to ", linkRequest.ToDevice)
+	case *gs.LinkerOutgoingChannel <- linkRequest:
 		return
 	default:
 		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
@@ -287,8 +293,7 @@ func (gs *GroundStation) establishConnection(toSatellite string) connections.INe
 		SendChannel: &sendChannel,
 	}
 	select {
-	case *gs.LinkerChannel <- linkRequest:
-		println("Link request sent new: ", linkRequest.FromDevice, " to ", linkRequest.ToDevice)
+	case *gs.LinkerOutgoingChannel <- linkRequest:
 		return newNetworkInterface
 	default:
 		gs.PendingConnections = append(gs.PendingConnections, linkRequest)
@@ -326,7 +331,7 @@ func (gs *GroundStation) SendPackets() {
 
 func (gs *GroundStation) CheckIncomingConnection() {
 	select {
-	case linkReq := <-*gs.LinkerChannel:
+	case linkReq := <-*gs.LinkerIncomingChannel:
 		inface, found := gs.GSLInterfaces[linkReq.FromDevice]
 		if found {
 			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
@@ -344,7 +349,7 @@ func (gs *GroundStation) SendPendingRequests() {
 	indx := 0
 	for indx < len(gs.PendingConnections) {
 		select {
-		case *gs.LinkerChannel <- gs.PendingConnections[indx]:
+		case *gs.LinkerOutgoingChannel <- gs.PendingConnections[indx]:
 			gs.PendingConnections = append(gs.PendingConnections[:indx], gs.PendingConnections[indx+1:]...)
 		default:
 			indx++

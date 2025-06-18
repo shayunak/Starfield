@@ -39,7 +39,8 @@ type Satellite struct {
 	AvailableISL          int
 	GSLInterfaceSample    connections.INetworkInterface
 	GSLInterfaces         map[string]connections.INetworkInterface
-	LinkerChannel         *LinkRequestChannel
+	LinkerOutgoingChannel *LinkRequestChannel
+	LinkerIncomingChannel *LinkRequestChannel
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
 	PendingConnections    []LinkRequest
@@ -62,7 +63,7 @@ type ISatellite interface {
 	// Simulation Mode
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
-	SetLinkerChannel(channel *LinkRequestChannel)
+	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	ReceiveFromInterfaces()
 	SendPackets()
@@ -204,8 +205,9 @@ func (satellite *Satellite) SetLoggerChannel(channel *LoggerDeviceChannel) {
 	satellite.LoggerChannel = channel
 }
 
-func (satellite *Satellite) SetLinkerChannel(channel *LinkRequestChannel) {
-	satellite.LinkerChannel = channel
+func (satellite *Satellite) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
+	satellite.LinkerIncomingChannel = ingoingChannel
+	satellite.LinkerOutgoingChannel = outgoingChannel
 }
 
 func (satellite *Satellite) getISLInterfaceNames() []string {
@@ -253,7 +255,7 @@ func startSatellite(mySatellite ISatellite) {
 
 func (satellite *Satellite) CheckIncomingConnection() {
 	select {
-	case linkReq := <-*satellite.LinkerChannel:
+	case linkReq := <-*satellite.LinkerIncomingChannel:
 		inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
 		if found {
 			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
@@ -271,7 +273,7 @@ func (satellite *Satellite) SendPendingRequests() {
 	indx := 0
 	for indx < len(satellite.PendingConnections) {
 		select {
-		case *satellite.LinkerChannel <- satellite.PendingConnections[indx]:
+		case *satellite.LinkerOutgoingChannel <- satellite.PendingConnections[indx]:
 			satellite.PendingConnections = append(satellite.PendingConnections[:indx], satellite.PendingConnections[indx+1:]...)
 		default:
 			indx++
@@ -343,7 +345,7 @@ func (satellite *Satellite) establishSendChannel(inface connections.INetworkInte
 		SendChannel: &sendChannel,
 	}
 	select {
-	case *satellite.LinkerChannel <- linkRequest:
+	case *satellite.LinkerOutgoingChannel <- linkRequest:
 		return
 	default:
 		satellite.PendingConnections = append(satellite.PendingConnections, linkRequest)
@@ -361,7 +363,7 @@ func (satellite *Satellite) establishGSLConnection(toGroundStation string) conne
 		SendChannel: &sendChannel,
 	}
 	select {
-	case *satellite.LinkerChannel <- linkRequest:
+	case *satellite.LinkerOutgoingChannel <- linkRequest:
 		return newNetworkInterface
 	default:
 		satellite.PendingConnections = append(satellite.PendingConnections, linkRequest)

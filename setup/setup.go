@@ -79,9 +79,10 @@ func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimula
 
 func initLinker(linker *actors.ILinker) {
 	*linker = &actors.Linker{
-		LinkChannels:       nil,
-		DeviceNames:        nil,
-		PendingConnections: make([]actors.LinkRequest, 0),
+		LinkIncomingRequestChannels: nil,
+		LinkRelayRequestChannels:    nil,
+		DeviceNames:                 nil,
+		PendingConnections:          make([]actors.LinkRequest, 0),
 	}
 }
 
@@ -163,13 +164,14 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteLinkChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationLinkChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
-	linkChannels := append(groundStationLinkChannels, satelliteLinkChannels...)
+	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
+	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
-	linker.SetDeviceChannels(&linkChannels, names)
+	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()
 }
@@ -220,13 +222,14 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteLinkChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationLinkChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
-	linkChannels := append(groundStationLinkChannels, satelliteLinkChannels...)
+	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
+	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
-	linker.SetDeviceChannels(&linkChannels, names)
+	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()
 }

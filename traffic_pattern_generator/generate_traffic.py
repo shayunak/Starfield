@@ -29,7 +29,7 @@ def generate_rows(time, matrix, ground_stations, number_of_ground_stations):
 
 def generate_uniform_traffic(ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period):
     ground_stations, number_of_ground_stations = read_ground_station_file(ground_station_file)
-    largest_traffic = buffer_size * packet_length / 1000.0
+    largest_traffic = buffer_size * packet_length / (1000.0 * (number_of_ground_stations - 1))
     time_step = int(packet_transmission_time * buffer_size)
     csv_writer, traffic_file = create_output_file("uniform", ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period)
 

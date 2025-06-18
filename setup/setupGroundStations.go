@@ -91,21 +91,24 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
-func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, []string) {
+func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, []string) {
 	logChannels := make(actors.LoggerDeviceChannels, 0)
-	linkChannels := make(actors.LinkRequestChannels, 0)
+	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
+	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	groundStationNames := make([]string, 0)
 	for _, groundStation := range groundStations {
 		logChannel := make(actors.LoggerDeviceChannel)
-		linkChannel := make(actors.LinkRequestChannel, 1)
+		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
+		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
-		linkChannels = append(linkChannels, &linkChannel)
+		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
+		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		groundStationNames = append(groundStationNames, groundStation.GetName())
 		groundStation.SetLoggerChannel(&logChannel)
-		groundStation.SetLinkerChannel(&linkChannel)
+		groundStation.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		groundStation.Run()
 	}
-	return logChannels, linkChannels, groundStationNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, groundStationNames
 }
 
 func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {
