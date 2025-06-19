@@ -29,3 +29,4 @@ shortest_path_forwarding/__pycache__/*
 #Generate Simulation
 generated/*
 forwarding_table/*
+satsim
