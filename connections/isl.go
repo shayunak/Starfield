@@ -12,7 +12,7 @@ type ISL struct {
 	PropagationDelay float64
 	Bandwidth        float64
 	LinkNoiseCoef    float64
-	BufferSize       float64
+	MaxPacketSize    float64
 	GeoCalculation   helpers.IAnomalyCalculation
 }
 
@@ -34,27 +34,25 @@ func (isl *ISL) CalculateDeliveryTime(packet Packet) float64 {
 	return isl.PropagationDelay + packet.Length/isl.Bitrate
 }
 
-func (isl *ISL) calculateBufferThresholdTime() float64 {
-	return isl.BufferSize / isl.Bitrate
-}
-
 // in ms
 func (isl *ISL) CalculateTransmissionTime(packet Packet) float64 {
 	return packet.Length / isl.Bitrate
 }
 
 func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
-	anomalyCalculations helpers.IAnomalyCalculation, bufferSize float64) []INetworkInterface {
+	anomalyCalculations helpers.IAnomalyCalculation, maxPacketSize float64, interfaceBufferSize int) []INetworkInterface {
 	islList := make([]INetworkInterface, numberOfIsls)
 	for i := 0; i < numberOfIsls; i++ {
 		islList[i] = &NetworkInterface{
-			InterfaceId:        i,
-			InterfaceOwner:     ownerSatellite,
-			SendChannel:        nil,
-			ReceiveChannel:     nil,
-			Link:               &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, bufferSize, anomalyCalculations},
-			DeviceConnectedTo:  "",
-			LastPacketSentTime: 0,
+			InterfaceId:         i,
+			InterfaceOwner:      ownerSatellite,
+			SendChannel:         nil,
+			ReceiveChannel:      nil,
+			Link:                &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, maxPacketSize, anomalyCalculations},
+			DeviceConnectedTo:   "",
+			BufferEndTimes:      make([]float64, 0),
+			Buffer:              make([]Packet, 0),
+			InterfaceBufferSize: interfaceBufferSize,
 		}
 	}
 	return islList
@@ -67,7 +65,7 @@ func (isl *ISL) Clone() ILink {
 		PropagationDelay: isl.PropagationDelay,
 		Bandwidth:        isl.Bandwidth,
 		LinkNoiseCoef:    isl.LinkNoiseCoef,
-		BufferSize:       isl.BufferSize,
+		MaxPacketSize:    isl.MaxPacketSize,
 		GeoCalculation:   isl.GeoCalculation,
 	}
 }

@@ -65,6 +65,7 @@ type IGroundStation interface {
 	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int)
 	ReceiveFromInterfaces()
 	SendPackets()
+	ProcessBuffers()
 	CheckIncomingConnection()
 	SendPendingRequests()
 	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) ([]connections.Packet, int)
@@ -110,7 +111,7 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.InterfaceBufferSize = interfaceBufferSize
 	newGS.EventQueue = make(connections.PriorityQueue, 0)
 	newGS.GSLInterfaceSample = connections.InitGSL(newGS.Name, speedOfLightVac, bandwidth, linkNoiseCoefficient, nil, 0.0,
-		headPointAscension, headPointAnomalyEl, groundStationCalculation, maxPacketSize*float64(interfaceBufferSize))
+		headPointAscension, headPointAnomalyEl, groundStationCalculation, maxPacketSize, interfaceBufferSize)
 	newGS.GSLInterfaces = make(map[string]connections.INetworkInterface)
 	newGS.PendingConnections = make([]LinkRequest, 0)
 
@@ -225,6 +226,14 @@ func (gs *GroundStation) GenerateTraffic(fromId int, traffic []TrafficEntry, max
 	return totalNumberOfPackets, idAssigned
 }
 
+func (gs *GroundStation) ProcessBuffers() {
+	for _, inface := range gs.GSLInterfaces {
+		if inface.HasSendChannel() {
+			inface.ProcessBuffer()
+		}
+	}
+}
+
 func (gs *GroundStation) ReceiveFromInterfaces() {
 	for gsName, inface := range gs.GSLInterfaces {
 		if inface.GetDeviceConnectedTo() != "" {
@@ -311,16 +320,15 @@ func (gs *GroundStation) SendPackets() {
 			if packet.Destination != gs.Name {
 				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
 				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
-				//print("sending data from ", gs.Name, " to ", forwardingSatellite, "\n")
+				if forwardingSatellite == "" {
+					println("No forwarding choice found for packet: ", packet.PacketId, " at time: ", timeStamp, " with destination: ", packet.Destination, " and source: ", gs.Name)
+				}
 				connection := gs.findConnection(forwardingSatellite)
-				packetDropped, packetBuffered, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
-				if !packetDropped && !packetBuffered {
+				packetDropped, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
+				if !packetDropped {
 					gs.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, gs.Name, connection.GetDeviceConnectedTo())
-				} else if packetDropped {
+				} else {
 					gs.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, gs.Name, connection.GetDeviceConnectedTo())
-				} else if packetBuffered {
-					heap.Push(&gs.EventQueue, itemPopped)
-					break
 				}
 			} else {
 				gs.logEvent(int(itemPopped.Value.TimeStamp), SIMULATION_EVENT_DELIVERED, itemPopped.Value.Data, packet.Source, packet.Destination)
@@ -363,5 +371,6 @@ func startGS(myGS IGroundStation) {
 		myGS.ReceiveFromInterfaces()
 		myGS.SendPendingRequests()
 		myGS.SendPackets()
+		myGS.ProcessBuffers()
 	}
 }

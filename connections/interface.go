@@ -18,35 +18,39 @@ const RECEIVE_EVENT int = 1
 
 type NetworkInterface struct {
 	/* Chance to buffer packets if the link is down*/
-	InterfaceId        int
-	InterfaceOwner     string
-	SendChannel        *chan Packet
-	ReceiveChannel     *chan Packet
-	Link               ILink
-	DeviceConnectedTo  string
-	LastPacketSentTime float64
+	InterfaceId         int
+	InterfaceOwner      string
+	SendChannel         *chan Packet
+	ReceiveChannel      *chan Packet
+	Link                ILink
+	DeviceConnectedTo   string
+	BufferEndTimes      []float64
+	InterfaceBufferSize int
+	Buffer              []Packet
 }
 
 type INetworkInterface interface {
-	Send(packet Packet, timeOfEvent float64) (bool, bool, int)
+	Send(packet Packet, timeOfEvent float64) (bool, int)
 	Receive() []Event
 	HasReceiveChannel() bool
 	HasSendChannel() bool
 	GetDeviceConnectedTo() string
 	GetDeviceOwner() string
 	GetLink() ILink
+	ProcessBuffer()
 	ChangeSendLink(newDeviceConnectedTo string, newSendChannel *chan Packet)
 	ChangeReceiveLink(newDeviceConnectedTo string, newReceiveChannel *chan Packet)
 	CloseSendSideConnection()
 	CloseReceiveSideConnection()
 	Clone() INetworkInterface
+	shouldDropPacket(packetTime float64, transmissionTime float64) bool
+	getLastPacketEndTime() float64
 }
 
 type ILink interface {
 	CalculateDeliveryTime(packet Packet) float64
 	CalculateTransmissionTime(packet Packet) float64
 	UpdateDistance(ownerId string, connectedId string, timeStamp float64) bool
-	calculateBufferThresholdTime() float64
 	Clone() ILink
 }
 
@@ -60,45 +64,78 @@ func (networkInterface *NetworkInterface) HasSendChannel() bool {
 
 func (networkInterface *NetworkInterface) Clone() INetworkInterface {
 	return &NetworkInterface{
-		InterfaceId:        networkInterface.InterfaceId,
-		InterfaceOwner:     networkInterface.InterfaceOwner,
-		SendChannel:        networkInterface.SendChannel,
-		ReceiveChannel:     networkInterface.ReceiveChannel,
-		Link:               networkInterface.Link.Clone(),
-		DeviceConnectedTo:  networkInterface.DeviceConnectedTo,
-		LastPacketSentTime: networkInterface.LastPacketSentTime,
+		InterfaceId:         networkInterface.InterfaceId,
+		InterfaceOwner:      networkInterface.InterfaceOwner,
+		SendChannel:         networkInterface.SendChannel,
+		ReceiveChannel:      networkInterface.ReceiveChannel,
+		Link:                networkInterface.Link.Clone(),
+		DeviceConnectedTo:   networkInterface.DeviceConnectedTo,
+		BufferEndTimes:      make([]float64, 0),
+		InterfaceBufferSize: networkInterface.InterfaceBufferSize,
+		Buffer:              make([]Packet, 0),
 	}
 }
 
-func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, bool, int) {
-	if len(*networkInterface.SendChannel) >= cap(*networkInterface.SendChannel) {
-		deltaTime := timeOfEvent - networkInterface.LastPacketSentTime
-		thresholdTime := networkInterface.Link.calculateBufferThresholdTime()
-		if deltaTime > thresholdTime {
-			return false, true, int(packet.PacketSentTime) // packet can be buffered
-		} else {
-			return true, false, int(packet.PacketSentTime) // packet dropped
-		}
+func (networkInterface *NetworkInterface) getLastPacketEndTime() float64 {
+	if len(networkInterface.BufferEndTimes) > 0 {
+		return networkInterface.BufferEndTimes[len(networkInterface.BufferEndTimes)-1]
 	}
+	return 0.0
+}
 
-	linkDown := networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*networkInterface.LastPacketSentTime)
+func (networkInterface *NetworkInterface) shouldDropPacket(timeOfEvent float64, packetEndTime float64) bool {
+	i := 0
+	for i < len(networkInterface.BufferEndTimes) && timeOfEvent > networkInterface.BufferEndTimes[i] {
+		i++
+	}
+	if i == 0 && len(networkInterface.BufferEndTimes) >= networkInterface.InterfaceBufferSize {
+		return true
+	}
+	if i >= len(networkInterface.BufferEndTimes) {
+		networkInterface.BufferEndTimes = []float64{packetEndTime}
+	} else {
+		networkInterface.BufferEndTimes = append(networkInterface.BufferEndTimes[i+1:], packetEndTime)
+	}
+	return false
+}
+
+func (networkInterface *NetworkInterface) ProcessBuffer() {
+	i := 0
+	for i < len(networkInterface.Buffer) && len(*networkInterface.SendChannel) < cap(*networkInterface.SendChannel) {
+		*networkInterface.SendChannel <- networkInterface.Buffer[i]
+		i++
+	}
+	networkInterface.Buffer = networkInterface.Buffer[i:]
+}
+
+func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float64) (bool, int) {
+	lastPacketEndTime := networkInterface.getLastPacketEndTime()
+	packetSentTime := max(timeOfEvent, lastPacketEndTime)
+	linkDown := networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packetSentTime)
 
 	if linkDown {
 		networkInterface.CloseSendSideConnection()
-		return true, false, int(packet.PacketSentTime) // packet dropped
+		return true, int(packetSentTime) // packet dropped
 	}
 
-	networkInterface.LastPacketSentTime = max(timeOfEvent, networkInterface.LastPacketSentTime)
-	packet.PacketSentTime = networkInterface.LastPacketSentTime
-	transmissionTime := networkInterface.Link.CalculateTransmissionTime(packet)
-	select {
-	case *networkInterface.SendChannel <- packet:
-		networkInterface.LastPacketSentTime += transmissionTime
-	default:
-		return true, false, int(packet.PacketSentTime) // packet dropped
+	packetEndTime := packetSentTime + networkInterface.Link.CalculateTransmissionTime(packet)
+	if networkInterface.shouldDropPacket(timeOfEvent, packetEndTime) {
+		return true, int(packetSentTime) // packet dropped
 	}
 
-	return false, false, int(packet.PacketSentTime) // packet sent
+	packet.PacketSentTime = packetSentTime
+	if len(*networkInterface.SendChannel) < cap(*networkInterface.SendChannel) {
+		if len(networkInterface.Buffer) > 0 {
+			networkInterface.Buffer = append(networkInterface.Buffer, packet)
+			networkInterface.ProcessBuffer()
+		} else {
+			*networkInterface.SendChannel <- packet
+		}
+	} else {
+		networkInterface.Buffer = append(networkInterface.Buffer, packet)
+	}
+
+	return false, int(packet.PacketSentTime) // packet sent
 }
 
 func (networkInterface *NetworkInterface) CloseSendSideConnection() {

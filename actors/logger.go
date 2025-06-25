@@ -236,17 +236,19 @@ func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 		PacketId:   packetId,
 	}
 	logger.Events = append(logger.Events, &newEvent)
-	//fmt.Println(newEvent.EventType, newEvent.FromDevice, newEvent.ToDevice, newEvent.PacketId)
+	if newEvent.EventType == helpers.EVENT_DELIVERED || newEvent.EventType == helpers.EVENT_DROPPED {
+		println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
+	}
 }
 
 func startLogger(logger ILogger, wg *sync.WaitGroup) {
+	println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 	for logger.GetRemainingUnprocessedPackets() > 0 {
 		selectDevicesCases := make([]reflect.SelectCase, logger.GetNumberOfDevices())
 		initChannelCases(&selectDevicesCases, logger)
 		index, value, _ := reflect.Select(selectDevicesCases)
 		simulationEvent := value.Interface().(SimulationEvent)
 		logger.ProcessEvent(simulationEvent, index)
-		println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 	}
 	logger.CloseChannels()
 	logger.logSimulationSummary()

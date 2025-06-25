@@ -19,7 +19,7 @@ type GSL struct {
 	PropagationDelay float64
 	Bandwidth        float64
 	LinkNoiseCoef    float64
-	BufferSize       float64
+	MaxPacketSize    float64
 	GeoCalculation   helpers.IGroundStationCalculation
 	GeometricSpec    *GeoSpec
 }
@@ -55,13 +55,9 @@ func (gsl *GSL) CalculateTransmissionTime(packet Packet) float64 {
 	return packet.Length / gsl.Bitrate
 }
 
-func (gsl *GSL) calculateBufferThresholdTime() float64 {
-	return gsl.BufferSize / gsl.Bitrate
-}
-
 func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
 	orbit helpers.IOrbit, anomaly float64, headPointAscension float64, headPointAnomalyEl helpers.AnomalyElements,
-	groundStationCalculations helpers.IGroundStationCalculation, bufferSize float64) INetworkInterface {
+	groundStationCalculations helpers.IGroundStationCalculation, maxPacketSize float64, interfaceBufferSize int) INetworkInterface {
 	return &NetworkInterface{
 		InterfaceId:    0,
 		InterfaceOwner: owner,
@@ -74,7 +70,7 @@ func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoise
 			Bandwidth:        bandwidth,
 			LinkNoiseCoef:    linkNoiseCoef,
 			GeoCalculation:   groundStationCalculations,
-			BufferSize:       bufferSize,
+			MaxPacketSize:    maxPacketSize,
 			GeometricSpec: &GeoSpec{
 				Anomaly:            anomaly,
 				Orbit:              orbit,
@@ -82,8 +78,10 @@ func InitGSL(owner string, speedOfLightVAC float64, bandwidth float64, linkNoise
 				HeadPointAnomalyEl: headPointAnomalyEl,
 			},
 		},
-		DeviceConnectedTo:  "",
-		LastPacketSentTime: 0,
+		DeviceConnectedTo:   "",
+		BufferEndTimes:      make([]float64, 0),
+		Buffer:              make([]Packet, 0),
+		InterfaceBufferSize: interfaceBufferSize,
 	}
 }
 
@@ -94,7 +92,7 @@ func (gsl *GSL) Clone() ILink {
 		PropagationDelay: gsl.PropagationDelay,
 		Bandwidth:        gsl.Bandwidth,
 		LinkNoiseCoef:    gsl.LinkNoiseCoef,
-		BufferSize:       gsl.BufferSize,
+		MaxPacketSize:    gsl.MaxPacketSize,
 		GeoCalculation:   gsl.GeoCalculation,
 		GeometricSpec:    gsl.GeometricSpec,
 	}
