@@ -30,6 +30,7 @@ type NetworkInterface struct {
 }
 
 type INetworkInterface interface {
+	IsBufferEmpty() bool
 	Send(packet Packet, timeOfEvent float64) (bool, int)
 	Receive() []Event
 	HasReceiveChannel() bool
@@ -52,6 +53,10 @@ type ILink interface {
 	CalculateTransmissionTime(packet Packet) float64
 	UpdateDistance(ownerId string, connectedId string, timeStamp float64) bool
 	Clone() ILink
+}
+
+func (networkInterface *NetworkInterface) IsBufferEmpty() bool {
+	return len(networkInterface.Buffer) == 0
 }
 
 func (networkInterface *NetworkInterface) HasReceiveChannel() bool {
@@ -114,7 +119,7 @@ func (networkInterface *NetworkInterface) Send(packet Packet, timeOfEvent float6
 	linkDown := networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packetSentTime)
 
 	if linkDown {
-		networkInterface.CloseSendSideConnection()
+		//networkInterface.CloseSendSideConnection() We don't know, no packet order
 		return true, int(packetSentTime) // packet dropped
 	}
 
@@ -162,7 +167,7 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 		case packet, ok := <-*networkInterface.ReceiveChannel:
 			if !ok && (len(*networkInterface.ReceiveChannel) == 0) {
 				channelEmpty = true
-				networkInterface.CloseReceiveSideConnection()
+				//networkInterface.CloseReceiveSideConnection() no packet order
 				break
 			}
 			networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packet.PacketSentTime)

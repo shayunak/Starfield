@@ -61,6 +61,7 @@ type ISatellite interface {
 	findSatellitesInRange() map[string]float64
 	findGroundStationsInRange() map[string]float64
 	// Simulation Mode
+	GetNumberOfPackets() int
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
@@ -198,6 +199,10 @@ func startSatelliteDistances(mySatellite ISatellite) {
 
 //////////////////////////////////// ****** Simulation Mode ****** //////////////////////////////////////////////////
 
+func (satellite *Satellite) GetNumberOfPackets() int {
+	return satellite.EventQueue.Len()
+}
+
 func (satellite *Satellite) SetForwardingTable(forwardingTable map[int]ForwardingEntry) {
 	satellite.ForwardingTable = forwardingTable
 }
@@ -259,11 +264,15 @@ func (satellite *Satellite) ProcessBuffers() {
 	for _, inface := range satellite.ISLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
+		} else if !inface.IsBufferEmpty() {
+			println("Satellite ", satellite.Name, " has a non-empty ISL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 	for _, inface := range satellite.GSLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
+		} else if !inface.IsBufferEmpty() {
+			println("Satellite ", satellite.Name, " has a non-empty GSL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 }
@@ -395,9 +404,6 @@ func (satellite *Satellite) SendPackets() {
 			packet := *itemPopped.Value.Data
 			timeStamp := int(itemPopped.Value.TimeStamp/float64(satellite.Dt)) * satellite.Dt
 			forwardingChoice := satellite.ForwardingTable[timeStamp][packet.Destination]
-			if forwardingChoice == "" {
-				println("No forwarding choice found for packet: ", packet.PacketId, " at time: ", timeStamp, " with destination: ", packet.Destination, " and source: ", satellite.Name)
-			}
 			if satellite.Orbit.IsOwnerSatellite(forwardingChoice) {
 				interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, satellite.getTimeStamp(), satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
 				if interfaceId != -1 {

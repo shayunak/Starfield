@@ -57,7 +57,6 @@ type IGroundStation interface {
 	SetDistanceLoggerChannel(channel *DistanceLoggerDeviceChannel)
 	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
 	// Simulation Mode
-	GetNumberOfPackets() int
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
@@ -166,10 +165,6 @@ func (gs *GroundStation) SetForwardingTable(forwardingTable map[int]ForwardingEn
 	gs.ForwardingTable = forwardingTable
 }
 
-func (gs *GroundStation) GetNumberOfPackets() int {
-	return gs.EventQueue.Len()
-}
-
 func (gs *GroundStation) SetLoggerChannel(channel *LoggerDeviceChannel) {
 	gs.LoggerChannel = channel
 }
@@ -230,6 +225,8 @@ func (gs *GroundStation) ProcessBuffers() {
 	for _, inface := range gs.GSLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
+		} else if !inface.IsBufferEmpty() {
+			println("Ground Station ", gs.Name, " has a non-empty GSL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 }
@@ -320,9 +317,6 @@ func (gs *GroundStation) SendPackets() {
 			if packet.Destination != gs.Name {
 				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
 				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
-				if forwardingSatellite == "" {
-					println("No forwarding choice found for packet: ", packet.PacketId, " at time: ", timeStamp, " with destination: ", packet.Destination, " and source: ", gs.Name)
-				}
 				connection := gs.findConnection(forwardingSatellite)
 				packetDropped, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
 				if !packetDropped {
