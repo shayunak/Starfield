@@ -1,5 +1,4 @@
 import sys, datetime, os, csv
-import matplotlib.pyplot as plt
 import distance_file_graph_generator as dfg
 import networkx as nx
 
