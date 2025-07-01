@@ -57,9 +57,32 @@ def pairwise_stretch_factor(gs_df: pd.DataFrame, overall: pd.DataFrame) -> pd.Se
     
     overall["Stretch_factor"] = overall.apply(stretch_factor, axis=1)
 
+#Calculate city pair RTT
+def pairwise_rtt(overall_df: pd.DataFrame) -> None:
+    df = overall_df.copy()
+    mask = (df["FromDevice"] != "ALL") & (df["FromDevice"] != df["ToDevice"])
+    df = df[mask]
+    df["city_pair"] = df.apply(lambda row: frozenset([row["FromDevice"], row["ToDevice"]]), axis=1)
+    pair_rtt = (df.groupby("city_pair")["Latency_ms"].sum().rename("RTT_ms"))
+    overall_df["RTT_ms"] = overall_df.apply(lambda row: pair_rtt.get(frozenset([row["FromDevice"], row["ToDevice"]]), pd.NA),axis=1)
+
+#Calculate Starlink link usage
+def pairwise_usage(sim_df: pd.DataFrame) -> pd.DataFrame:
+    df = sim_df.loc[sim_df["Event"] == "RECEIVE"].dropna(subset=["FromDevice", "ToDevice"])
+    def is_satellite(name: str) -> bool:
+        return isinstance(name, str) and name.startswith('Starlink')
+    df = df[df["FromDevice"].apply(is_satellite) & df["ToDevice"].apply(is_satellite)]
+    df["link"] = df.apply(lambda row: tuple(sorted([row["FromDevice"].strip(), row["ToDevice"].strip()])),axis=1)
+    satellite_df = (df.groupby("link")["PacketId"].nunique().reset_index().rename(columns={"PacketId": "UsageCount"}).sort_values("UsageCount", ascending=False).reset_index(drop=True))
+    satellite_df[["SatelliteA", "SatelliteB"]] = pd.DataFrame(satellite_df["link"].tolist(),index=satellite_df.index)
+    satellite_df = satellite_df[["link","SatelliteA", "SatelliteB", "UsageCount"]]
+    return satellite_df
+
+
+
 def show_results(overall: pd.DataFrame, number_of_dropped_packets, number_of_delivered_packets, throughput) -> None:
     print("Analysis Results:")
-    display_cols = ["FromDevice", "ToDevice", "Latency_ms", "Avg_Hop", "Stretch_factor"]
+    display_cols = ["FromDevice", "ToDevice", "Latency_ms", "RTT_ms", "Avg_Hop", "Stretch_factor"]
     print(overall[display_cols].to_string(index=False))
     print("================================================================")
 
@@ -104,16 +127,22 @@ def analyze(sim_csv: Path, gs_csv: Path) -> None:
     # 4. Calculate Stretch Factor
     pairwise_stretch_factor(gs_df, overall)
 
+    # 5. Calculate RTT
+    pairwise_rtt(overall)
 
-    # 5. Calculate dropped packets
+    # 6. Starlink link usage
+    satellite_df = pairwise_usage(sim_df)
+    satellite_df.to_csv(results_folder / "starlink_usage.csv", index=False)
+
+    # 7. Calculate dropped packets
     dropped_packets = sim_df.loc[sim_df["Event"] == "DROP", "PacketId"]
 
-    # 6. Total Throughput
+    # 8. Total Throughput
     delivered_set = set(sim_df.loc[sim_df["Event"] == "DELIVERED", "PacketId"])
     duration_s = (sim_df["TimeStamp(ms)"].max() - sim_df["TimeStamp(ms)"].min()) / 1000
     throughput = len(delivered_set) / duration_s
 
-    # 7. Print Results
+    # 9. Print Results
     show_results(overall, len(dropped_packets), len(delivered_set), throughput)
 
     return overall
