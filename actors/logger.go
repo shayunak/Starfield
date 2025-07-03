@@ -239,8 +239,6 @@ func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 	if newEvent.EventType == helpers.EVENT_DELIVERED || newEvent.EventType == helpers.EVENT_DROPPED {
 		println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 	}
-	//println("Processing Event: ", newEvent.EventType, " from: ", event.FromDevice, " to: ", event.ToDevice,
-	//	" at: ", event.TimeStamp, " with packetId: ", packetId)
 }
 
 func startLogger(logger ILogger, wg *sync.WaitGroup) {

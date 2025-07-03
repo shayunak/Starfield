@@ -15,26 +15,26 @@ def get_inter_orbit_pattern(id, neighbor_id):
     neighbor_id = int(neighbor_id.split("-")[2])
     return neighbor_id - id
 
-def generate_intra_orbit_isls(graph, orbit, number_of_satellites_per_orbit, constellation_name, distance_graph, isls_in_orbits):
+def in_same_orbit(satellite_id, neighbor_id):
+    satellite_orbit = int(satellite_id.split("-")[1])
+    neighbor_orbit = int(neighbor_id.split("-")[1])
+    return satellite_orbit == neighbor_orbit
+
+def generate_intra_orbit_isls(graph, orbit, number_of_satellites_per_orbit, constellation_name, distance_graph, number_of_isls):
     for id in range(number_of_satellites_per_orbit):
         satellite_id = f"{constellation_name}-{orbit}-{id}"
-        neighbors = ([neighbor for neighbor in list(distance_graph.neighbors(satellite_id)) 
-                      if distance_graph.get_edge_data(satellite_id, neighbor).get('type') == 'intra_orbit_isl'])
+        possible_neighbors = ([neighbor for neighbor in list(distance_graph.neighbors(satellite_id)) 
+                      if in_same_orbit(satellite_id, neighbor) and  graph.degree(neighbor) < number_of_isls])
         
-        if len(neighbors) < isls_in_orbits:
-            raise ValueError(f"Not enough neighbors for intra-orbit ISLs for satellite {satellite_id} in orbit {orbit}.")
-        
-        selected_neighbors = random.sample(neighbors, isls_in_orbits)
-        for neighbor in selected_neighbors:
-            if graph.degree[satellite_id] < isls_in_orbits:
-                graph.add_edge(satellite_id, neighbor)
-            else:
-                break
+        while graph.degree(satellite_id) < number_of_isls and len(possible_neighbors) > 0:
+            selected_neighbor = random.sample(possible_neighbors, 1)
+            if not graph.has_edge(satellite_id, selected_neighbor[0]):
+                graph.add_edge(satellite_id, selected_neighbor[0])
+                possible_neighbors = [neighbor for neighbor in possible_neighbors if graph.degree(neighbor) < number_of_isls]
 
 def generate_inter_orbit_isls(graph, orbit, number_of_satellites_per_orbit, number_of_orbits, constellation_name, distance_graph, isls_between_orbits):
     base_satellite_id = f"{constellation_name}-{orbit}-0"
-    neighbors = ([neighbor for neighbor in list(distance_graph.neighbors(base_satellite_id)) 
-                      if distance_graph.get_edge_data(base_satellite_id, neighbor).get('type') == 'inter_orbit_isl'])
+    neighbors = list(distance_graph.neighbors(base_satellite_id)) 
     neighbors_on_right = [neighbor for neighbor in neighbors if is_neighbor_on_right_orbit(orbit, neighbor, number_of_orbits)]
     selected_neighbors = random.sample(neighbors_on_right, isls_between_orbits // 2)
     inter_orbit_pattern = [get_inter_orbit_pattern(0, neighbor) for neighbor in selected_neighbors]
@@ -47,16 +47,19 @@ def generate_inter_orbit_isls(graph, orbit, number_of_satellites_per_orbit, numb
 def generate_random_topology(distance_file, num_orbits, num_satellites, num_isls):
     df, constellation_name, time_step, total_time, simulation_details, nodes = cdg.read_distance_file(distance_file)
     consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df, nodes, constellation_name, time_step, total_time)
-    #nx.write_adjlist(consistent_distance_graph, 'ConsistentDistanceGraph.adjlist')
     topology_graph = nx.Graph()
     topology_graph.add_nodes_from(satellite_nodes)
+
+    # Generate inter-orbit ISLs
     for orbit in range(num_orbits):
         num_inter_orbit_isls = 2 * random.randint(1, num_isls // 2)
-        num_intra_orbit_isls = num_isls - num_inter_orbit_isls
         generate_inter_orbit_isls(topology_graph, orbit, num_satellites, num_orbits, constellation_name, consistent_distance_graph, num_inter_orbit_isls)
-        generate_intra_orbit_isls(topology_graph, orbit, num_satellites, constellation_name, consistent_distance_graph, num_intra_orbit_isls)
 
-    filename = f"RandomStaticTopology#{datetime.datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}.csv"
+    # Generate intra-orbit ISLs
+    for orbit in range(num_orbits):
+        generate_intra_orbit_isls(topology_graph, orbit, num_satellites, constellation_name, consistent_distance_graph, num_isls)
+
+    filename = f"RandomStaticTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}.csv"
     save_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
 
 def save_topology_to_file(graph, nodes, filename):

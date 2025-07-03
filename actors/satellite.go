@@ -230,6 +230,7 @@ func (satellite *Satellite) AddISLConnectionOnId(id int, connectedDevice string,
 	if satellite.AvailableISL <= 0 {
 		return false
 	}
+	println("Adding ISL connection on id: ", id, " for satellite: ", satellite.Name, " to device: ", connectedDevice)
 	satellite.ISLInterfaces[id].ChangeSendLink(connectedDevice, sendChannel)
 	satellite.ISLInterfaces[id].ChangeReceiveLink(connectedDevice, receiveChannel)
 	satellite.AvailableISL--
@@ -264,15 +265,11 @@ func (satellite *Satellite) ProcessBuffers() {
 	for _, inface := range satellite.ISLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
-		} else if !inface.IsBufferEmpty() {
-			println("Satellite ", satellite.Name, " has a non-empty ISL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 	for _, inface := range satellite.GSLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
-		} else if !inface.IsBufferEmpty() {
-			println("Satellite ", satellite.Name, " has a non-empty GSL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 }

@@ -84,7 +84,6 @@ func (linker *Linker) sendRequest(request LinkRequest) bool {
 	channels := *linker.GetOutgoingRequestChannels()
 	destIndex := slices.IndexFunc(linker.DeviceNames, func(name string) bool { return name == request.ToDevice })
 	if destIndex == -1 {
-		println("Unknown Destination to: ", request.ToDevice, " from: ", request.ToDevice)
 		return false
 	}
 	select {

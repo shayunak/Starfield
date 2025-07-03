@@ -225,8 +225,6 @@ func (gs *GroundStation) ProcessBuffers() {
 	for _, inface := range gs.GSLInterfaces {
 		if inface.HasSendChannel() {
 			inface.ProcessBuffer()
-		} else if !inface.IsBufferEmpty() {
-			println("Ground Station ", gs.Name, " has a non-empty GSL interface buffer with no send channel. This is unexpected.")
 		}
 	}
 }

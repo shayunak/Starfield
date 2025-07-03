@@ -27,8 +27,7 @@ func openISLTopologyFile(fileName string) (*os.File, *csv.Reader) {
 // ISL file format: FirstSatellite, SecondSatellite
 // Important: The file should have both (S1, S2) and (S2, S1) pairs symmetrically, like a matrix
 func readISLTopologyFile(ISLTopologyFileName string) [][]string {
-	ISLTopologyFilePath := "./input/" + ISLTopologyFileName
-	file, reader := openISLTopologyFile(ISLTopologyFilePath)
+	file, reader := openISLTopologyFile(ISLTopologyFileName)
 
 	defer file.Close()
 

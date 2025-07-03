@@ -52,8 +52,8 @@ def satellite_usage_plot(results_dir: str) -> None:
     plt.grid(True)
     plt.legend()
 
-    plt.savefig(f"{results_dir}/starlink_usage_plot.png")
-    print(f'Starlink usage plot saved as {results_dir}/starlink_usage_plot.png')
+    plt.savefig(f"{results_dir}/Link_usage_plot.png")
+    print(f'Link usage plot saved as {results_dir}/Link_usage_plot.png')
 
 
 
