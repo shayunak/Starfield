@@ -21,7 +21,7 @@ def packet_latency(group: pd.DataFrame) -> pd.Series:
     return deliver_times.min() - send_times.min()
 
 def pairwise_latency(sim_df: pd.DataFrame) -> pd.Series:
-    return sim_df.groupby("PacketId").apply(packet_latency, include_groups=False).dropna().reset_index(name="Latency_ms")
+    return sim_df.groupby("PacketId").apply(packet_latency).dropna().reset_index(name="Latency_ms")
 
 def add_gs_pairs(sim_df: pd.DataFrame, perf_metrics_df: pd.DataFrame) -> pd.Series:
     send_map = (sim_df[sim_df["Event"] == "SEND"]
@@ -132,7 +132,7 @@ def analyze(sim_csv: Path, gs_csv: Path) -> None:
 
     # 6. Starlink link usage
     satellite_df = pairwise_usage(sim_df)
-    satellite_df.to_csv(results_folder / "starlink_usage.csv", index=False)
+    satellite_df.to_csv(results_folder / "link_usage.csv", index=False)
 
     # 7. Calculate dropped packets
     dropped_packets = sim_df.loc[sim_df["Event"] == "DROP", "PacketId"]

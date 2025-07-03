@@ -44,11 +44,12 @@ def RTT_cdf_plot(overall: pd.DataFrame,results_dir: str) -> None:
     print(f'RTT and CDF plot saved as {results_dir}/RTT_cdf_plot.png')
 
 def satellite_usage_plot(results_dir: str) -> None:
-    satellite_df = pd.read_csv(results_dir/"starlink_usage.csv")
+    satellite_df = pd.read_csv(results_dir/"link_usage.csv")
     plt.figure()
-    plt.plot(satellite_df["UsageCount"].values,drawstyle="steps-post", color='orange',label="Starlink link usage")
+    plt.plot(satellite_df["UsageCount"].values,drawstyle="steps-post", color='orange',label="Link usage")
     plt.xlabel("Links ordered by usage")
     plt.ylabel("No. of paths using a link")
+    plt.title('Inter-Satellite Link (ISL) Usage Frequency', fontsize=14)
     plt.grid(True)
     plt.legend()
 
