@@ -8,7 +8,7 @@ The following project is a packet-level routing multi-process simulator for Low 
 
 ## Requirements
 1. [Go 1.22.1](https://tip.golang.org/doc/go1.22)
-2. [Pyhton 3.7.2](https://www.python.org/downloads/release/python-372/)
+2. [Pyhton 3.12.9](https://www.python.org/downloads/release/python-3129/)
 3. [NetworkX](https://networkx.org/)
 4. [Pandas](https://pandas.pydata.org/)
 5. [Numpy](https://numpy.org/)

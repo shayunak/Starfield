@@ -20,6 +20,7 @@ type Logger struct {
 	TimeStamp           int
 	TotalSimulationTime int // in seconds
 	// Simulation Mode
+	CoordinatorChannel          *chan float64
 	LoggerDeviceChannels        *LoggerDeviceChannels
 	RemainingUnprocessedPackets int
 	DeviceNames                 []string
@@ -35,13 +36,16 @@ type DistanceLoggerDeviceChannels []*DistanceLoggerDeviceChannel
 type ILogger interface {
 	// Distances Mode
 	RunDistances(wg *sync.WaitGroup)
-	GetDistancesDeviceChannels() *DistanceLoggerDeviceChannels
 	SetDistancesDeviceChannels(channels *DistanceLoggerDeviceChannels)
 	GetDistancesNumberOfDevices() int
+	InitDistancesChannelCases(selectCases *[]reflect.SelectCase)
+	DeleteDistancesDevice(index int)
 	addNewDistanceEntries(distancesMessage UpdateDistancesMessage)
 	addNewDistanceEntry(entry *helpers.DistanceEntry)
 	logDistancesSimulationSummary()
 	// Simulation Mode
+	IsInRangeSimulationTime() bool
+	UpdateTimeStamp(newTimeStamp int)
 	SetDeviceChannels(channels *LoggerDeviceChannels, deviceNames []string)
 	GetNumberOfDevices() int
 	GetDeviceChannels() *LoggerDeviceChannels
@@ -49,6 +53,7 @@ type ILogger interface {
 	GetRemainingUnprocessedPackets() int
 	ProcessEvent(event SimulationEvent, sourceIndex int)
 	CloseChannels()
+	InitChannelCases(selectCases *[]reflect.SelectCase)
 	logSimulationSummary()
 	Run(wg *sync.WaitGroup)
 	// General
@@ -67,15 +72,15 @@ type UpdateDistancesMessage struct {
 	Distances  map[string]float64
 }
 
-func initDistancesChannelCases(selectCases *[]reflect.SelectCase, logger ILogger) {
-	channels := *logger.GetDistancesDeviceChannels()
+func (logger *Logger) InitDistancesChannelCases(selectCases *[]reflect.SelectCase) {
+	channels := *logger.DistancesLoggerChannels
 	for i, channel := range channels {
 		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
 }
 
-func deleteDistancesDevice(logger ILogger, index int) {
-	devices := *logger.GetDistancesDeviceChannels()
+func (logger *Logger) DeleteDistancesDevice(index int) {
+	devices := *logger.DistancesLoggerChannels
 	devices = append(devices[:index], devices[index+1:]...)
 	logger.SetDistancesDeviceChannels(&devices)
 }
@@ -83,10 +88,10 @@ func deleteDistancesDevice(logger ILogger, index int) {
 func startDistancesLogger(logger ILogger, wg *sync.WaitGroup) {
 	for logger.GetDistancesNumberOfDevices() > 0 {
 		selectSatellitesCases := make([]reflect.SelectCase, logger.GetDistancesNumberOfDevices())
-		initDistancesChannelCases(&selectSatellitesCases, logger)
+		logger.InitDistancesChannelCases(&selectSatellitesCases)
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
-			deleteDistancesDevice(logger, chosen)
+			logger.DeleteDistancesDevice(chosen)
 		}
 		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
 		logger.addNewDistanceEntries(distanceUpdateMessage)
@@ -113,10 +118,6 @@ func (logger *Logger) addNewDistanceEntries(distancesMessage UpdateDistancesMess
 	if logger.TimeStamp < distancesMessage.TimeStamp {
 		logger.TimeStamp = distancesMessage.TimeStamp
 	}
-}
-
-func (logger *Logger) GetDistancesDeviceChannels() *DistanceLoggerDeviceChannels {
-	return logger.DistancesLoggerChannels
 }
 
 func (logger *Logger) GetDistancesNumberOfDevices() int {
@@ -188,6 +189,14 @@ func (logger *Logger) GetDeviceNames() []string {
 	return logger.DeviceNames
 }
 
+func (logger *Logger) IsInRangeSimulationTime() bool {
+	return logger.TimeStamp < logger.TotalSimulationTime
+}
+
+func (logger *Logger) UpdateTimeStamp(newTimeStamp int) {
+	logger.TimeStamp = newTimeStamp
+}
+
 func (logger *Logger) GetDeviceChannels() *LoggerDeviceChannels {
 	return logger.LoggerDeviceChannels
 }
@@ -196,11 +205,12 @@ func (logger *Logger) GetRemainingUnprocessedPackets() int {
 	return logger.RemainingUnprocessedPackets
 }
 
-func initChannelCases(selectCases *[]reflect.SelectCase, logger ILogger) {
+func (logger *Logger) InitChannelCases(selectCases *[]reflect.SelectCase) {
 	channels := *logger.GetDeviceChannels()
 	for i, channel := range channels {
 		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
+	(*selectCases)[logger.GetNumberOfDevices()] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*logger.CoordinatorChannel)}
 }
 
 func (logger *Logger) CloseChannels() {
@@ -236,19 +246,22 @@ func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 		PacketId:   packetId,
 	}
 	logger.Events = append(logger.Events, &newEvent)
-	if newEvent.EventType == helpers.EVENT_DELIVERED || newEvent.EventType == helpers.EVENT_DROPPED {
-		println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
-	}
 }
 
 func startLogger(logger ILogger, wg *sync.WaitGroup) {
-	println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
-	for logger.GetRemainingUnprocessedPackets() > 0 {
-		selectDevicesCases := make([]reflect.SelectCase, logger.GetNumberOfDevices())
-		initChannelCases(&selectDevicesCases, logger)
+	//println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
+	for logger.GetRemainingUnprocessedPackets() > 0 && logger.IsInRangeSimulationTime() {
+		selectDevicesCases := make([]reflect.SelectCase, logger.GetNumberOfDevices()+1)
+		logger.InitChannelCases(&selectDevicesCases)
 		index, value, _ := reflect.Select(selectDevicesCases)
-		simulationEvent := value.Interface().(SimulationEvent)
-		logger.ProcessEvent(simulationEvent, index)
+		if index == logger.GetNumberOfDevices() { // Coordinator channel
+			timeStamp := value.Interface().(int)
+			logger.UpdateTimeStamp(timeStamp)
+			log.Default().Println("Time Progress: ", timeStamp, " ms, Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
+		} else {
+			simulationEvent := value.Interface().(SimulationEvent)
+			logger.ProcessEvent(simulationEvent, index)
+		}
 	}
 	logger.CloseChannels()
 	logger.logSimulationSummary()

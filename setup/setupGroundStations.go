@@ -43,7 +43,7 @@ func openGroundStationFiles(fileName string) (*os.File, *csv.Reader) {
 
 func initGroundStations(groundStations *GroundStationList, config Config, groundStationFileName string,
 	groundCalc helpers.IGroundStationCalculation, timeStep int, totalSimulationTime int) {
-	totalSimulationTimeMilliseconds := totalSimulationTime * 1000
+	totalSimulationTimeMilliseconds := float64(totalSimulationTime) * 1000.0
 	groundStationFile, groundStationCoordinates := openGroundStationFiles(groundStationFileName)
 	groundStationSpecs := make(helpers.GroundStationSpecs)
 
@@ -80,7 +80,7 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 			HeadPointAnomalyEl: anomalyEl,
 		}
 		*groundStations = append(*groundStations,
-			actors.NewGroundStation(groundStationName, groundStationLatitude, groundStationLongitude, timeStep,
+			actors.NewGroundStation(groundStationName, groundStationLatitude, groundStationLongitude, float64(timeStep),
 				totalSimulationTimeMilliseconds, anomaly, ascension, groundCalc, config.SatelliteConfig.SpeedOfLightVac,
 				config.SatelliteConfig.GSLBandwidth, config.SatelliteConfig.GSLLinkNoiseCoef, anomalyEl,
 				config.SatelliteConfig.MaxPacketSize, config.SatelliteConfig.InterfaceBufferSize),
@@ -91,24 +91,28 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
-func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, []string) {
+func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, actors.ProgressTokenChannels, []string) {
 	logChannels := make(actors.LoggerDeviceChannels, 0)
+	tokenChannels := make(actors.ProgressTokenChannels, 0)
 	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
 	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	groundStationNames := make([]string, 0)
 	for _, groundStation := range groundStations {
 		logChannel := make(actors.LoggerDeviceChannel)
+		tokenChannel := make(actors.ProgressTokenChannel, 1)
 		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
 		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
+		tokenChannels = append(tokenChannels, &tokenChannel)
 		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
 		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		groundStationNames = append(groundStationNames, groundStation.GetName())
 		groundStation.SetLoggerChannel(&logChannel)
+		groundStation.SetProgressTokenChannel(&tokenChannel)
 		groundStation.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		groundStation.Run()
 	}
-	return logChannels, linkIncomingChannels, linkOutgoingChannels, groundStationNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, groundStationNames
 }
 
 func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {

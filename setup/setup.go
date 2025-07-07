@@ -63,10 +63,12 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	return anomalyCalc, groundCalc
 }
 
-func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) {
+func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) *chan float64 {
+	coordinatorChannel := make(chan float64, 1)
 	*logger = &actors.Logger{
-		TotalSimulationTime:         totalSimulationTime,
+		TotalSimulationTime:         totalSimulationTime * 1000, // in milliseconds
 		LoggerDeviceChannels:        nil,
+		CoordinatorChannel:          &coordinatorChannel,
 		DistancesLoggerChannels:     nil,
 		DeviceNames:                 nil,
 		DistanceEntries:             make(helpers.DistanceEntryList, 0),
@@ -75,6 +77,7 @@ func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimula
 		TimeStep:                    timeStep,
 		TimeStamp:                   0,
 	}
+	return &coordinatorChannel
 }
 
 func initLinker(linker *actors.ILinker) {
@@ -83,6 +86,16 @@ func initLinker(linker *actors.ILinker) {
 		LinkRelayRequestChannels:    nil,
 		DeviceNames:                 nil,
 		PendingConnections:          make([]actors.LinkRequest, 0),
+	}
+}
+
+func initCoordinator(coordinator *actors.ICoordinator, loggerChannel *chan float64, totalSimulationTime int) {
+	*coordinator = &actors.Coordinator{
+		ProgressTokenChannels: nil,
+		LoggerChannel:         loggerChannel,
+		TimeStamp:             0,
+		NumberOfAcksPerRound:  0,
+		TotalSimulationTime:   float64(totalSimulationTime) * 1000.0, // in milliseconds
 	}
 }
 
@@ -124,6 +137,7 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	var groundStations GroundStationList
 	var logger actors.ILogger
 	var linker actors.ILinker
+	var coordinator actors.ICoordinator
 
 	// reading the config file
 	config := getConfig(configFileName)
@@ -153,8 +167,9 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	}
 
 	// initializing the Logger and  the Linker
-	initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	coordinatorChannel := initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
 	initLinker(&linker)
+	initCoordinator(&coordinator, coordinatorChannel, totalSimulationTime)
 
 	// bringing up the ISL topology
 	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
@@ -164,13 +179,15 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
+	tokenChannels := append(groundStationTokenChannels, satelliteTokenChannels...)
 	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
 	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
+	coordinator.SetProgressTokenChannels(&tokenChannels)
 	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()
@@ -181,6 +198,7 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	var satellites SatelliteList
 	var groundStations GroundStationList
 	var logger actors.ILogger
+	var coordinator actors.ICoordinator
 	var linker actors.ILinker
 
 	// reading the config file
@@ -211,8 +229,9 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	}
 
 	// initializing the Logger and the Linker
-	initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
+	coordinatorChannel := initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
 	initLinker(&linker)
+	initCoordinator(&coordinator, coordinatorChannel, totalSimulationTime)
 
 	// bringing up the ISL topology
 	topologyPairs := GenerateISLTopology(ISLTopologyFileName)
@@ -222,13 +241,15 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
+	tokenChannels := append(groundStationTokenChannels, satelliteTokenChannels...)
 	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
 	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
+	coordinator.SetProgressTokenChannels(&tokenChannels)
 	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()

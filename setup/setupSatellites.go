@@ -29,7 +29,7 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	inclinationRadians := config.OrbitConfig.Inclination * math.Pi / 180.0
 	orbitRadius := config.OrbitConfig.EarthRadius + config.OrbitConfig.Altitude
 	anomalyStep := 360.0 / float64(numberOfSatellitesPerOrbit)
-	totalSimulationTimeMilliseconds := totalSimulationTime * 1000 // in milliseconds
+	totalSimulationTimeMilliseconds := float64(totalSimulationTime) * 1000 // in milliseconds
 	earthMotionRadiansPerSecond := config.OrbitConfig.EarthRotationPeriod * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
 	ascensionStep := 0.0
 	if numberOfOrbits > 1 {
@@ -50,7 +50,7 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 		for satellite := 0; satellite < numberOfSatellitesPerOrbit; satellite++ {
 			anomaly := phaseShift + float64(satellite)*anomalyStep
 
-			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, timeStep, totalSimulationTimeMilliseconds,
+			*satellites = append(*satellites, actors.NewSatellite(satellite, anomaly, float64(timeStep), totalSimulationTimeMilliseconds,
 				orbit, anomalyCalc, groundCalc, config.SatelliteConfig.NumberOfISLs, config.SatelliteConfig.SpeedOfLightVac,
 				config.SatelliteConfig.ISLBandwidth, config.SatelliteConfig.ISLLinkNoiseCoef, config.SatelliteConfig.GSLBandwidth,
 				config.SatelliteConfig.GSLLinkNoiseCoef, config.SatelliteConfig.ISLAcquisitionTime,
@@ -59,24 +59,28 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	}
 }
 
-func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, []string) {
+func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, actors.ProgressTokenChannels, []string) {
 	logChannels := make(actors.LoggerDeviceChannels, 0)
+	tokenChannels := make(actors.ProgressTokenChannels, 0)
 	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
 	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	satelliteNames := make([]string, 0)
 	for _, satellite := range satellites {
 		logChannel := make(actors.LoggerDeviceChannel)
+		tokenChannel := make(actors.ProgressTokenChannel, 1)
 		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
 		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
+		tokenChannels = append(tokenChannels, &tokenChannel)
 		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
 		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		satelliteNames = append(satelliteNames, satellite.GetName())
 		satellite.SetLoggerChannel(&logChannel)
+		satellite.SetProgressTokenChannel(&tokenChannel)
 		satellite.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		satellite.Run()
 	}
-	return logChannels, linkIncomingChannels, linkOutgoingChannels, satelliteNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, satelliteNames
 }
 
 func startDistancesSatellites(satellites SatelliteList) actors.DistanceLoggerDeviceChannels {

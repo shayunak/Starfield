@@ -18,9 +18,9 @@ type TrafficEntry struct {
 type GroundStation struct {
 	// General
 	Name                string
-	Dt                  int // in milliseconds
-	TimeStamp           int // in milliseconds
-	TotalSimulationTime int // in milliseconds
+	Dt                  float64 // in milliseconds
+	TimeStamp           float64 // in milliseconds
+	TotalSimulationTime float64 // in milliseconds
 
 	// Geometrical parameters
 	Longitude          float64
@@ -31,8 +31,9 @@ type GroundStation struct {
 	GSCalculation      helpers.IGroundStationCalculation
 
 	// Packet Level Simulation
-	ForwardingTable map[int]ForwardingEntry
-	EventQueue      connections.PriorityQueue
+	ForwardingTable  map[int]ForwardingEntry
+	EventQueue       connections.PriorityQueue
+	lastAckTimeStamp float64 // in milliseconds
 
 	// Goroutines and connections, and channels
 	InterfaceBufferSize   int
@@ -40,14 +41,15 @@ type GroundStation struct {
 	GSLInterfaces         map[string]connections.INetworkInterface
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
+	ProgressTokenChannel  *ProgressTokenChannel
 	LinkerOutgoingChannel *LinkRequestChannel
 	LinkerIncomingChannel *LinkRequestChannel
 	PendingConnections    []LinkRequest
 }
 
 type IGroundStation interface {
-	getTimeStamp() int
-	getTotalSimulationTime() int
+	getTimeStamp() float64
+	getTotalSimulationTime() float64
 	GetName() string
 	// Distance Mode
 	RunDistances()
@@ -59,12 +61,15 @@ type IGroundStation interface {
 	// Simulation Mode
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
+	SetProgressTokenChannel(channel *ProgressTokenChannel)
 	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int)
 	ReceiveFromInterfaces()
-	SendPackets()
+	SendPackets() float64
 	ProcessBuffers()
+	CheckProgressToken()
+	SendTimeStampAck(nextTimeStamp float64)
 	CheckIncomingConnection()
 	SendPendingRequests()
 	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) ([]connections.Packet, int)
@@ -78,15 +83,15 @@ func (gs *GroundStation) GetName() string {
 	return gs.Name
 }
 
-func (gs *GroundStation) getTimeStamp() int {
+func (gs *GroundStation) getTimeStamp() float64 {
 	return gs.TimeStamp
 }
 
-func (gs *GroundStation) getTotalSimulationTime() int {
+func (gs *GroundStation) getTotalSimulationTime() float64 {
 	return gs.TotalSimulationTime
 }
 
-func NewGroundStation(name string, latitude float64, longitude float64, dt int, totalSimulationTime int,
+func NewGroundStation(name string, latitude float64, longitude float64, dt float64, totalSimulationTime float64,
 	headPointAnomaly float64, headPointAscension float64, groundStationCalculation helpers.IGroundStationCalculation,
 	speedOfLightVac float64, bandwidth float64, linkNoiseCoefficient float64, headPointAnomalyEl helpers.AnomalyElements,
 	maxPacketSize float64, interfaceBufferSize int) IGroundStation {
@@ -96,7 +101,7 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.Name = name
 	newGS.Dt = dt
 	newGS.TotalSimulationTime = totalSimulationTime
-	newGS.TimeStamp = 0
+	newGS.TimeStamp = 0.0
 
 	// Geo
 	newGS.Latitude = latitude
@@ -105,6 +110,9 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt int, 
 	newGS.HeadPointAnomaly = headPointAnomaly
 	newGS.HeadPointAscension = headPointAscension
 	newGS.HeadPointAnomalyEl = headPointAnomalyEl
+
+	// Packet Level Simulation
+	newGS.lastAckTimeStamp = 0.0
 
 	// Channels
 	newGS.InterfaceBufferSize = interfaceBufferSize
@@ -144,7 +152,7 @@ func (gs *GroundStation) updatePosition() {
 func (gs *GroundStation) logDistances() {
 	(*gs.DistanceLoggerChannel) <- UpdateDistancesMessage{
 		DeviceName: gs.Name,
-		TimeStamp:  gs.TimeStamp,
+		TimeStamp:  int(gs.TimeStamp),
 		Distances: gs.GSCalculation.FindSatellitesInRange(gs.Name, gs.HeadPointAscension, gs.HeadPointAnomalyEl,
 			float64(gs.TimeStamp)*0.001),
 	}
@@ -167,6 +175,10 @@ func (gs *GroundStation) SetForwardingTable(forwardingTable map[int]ForwardingEn
 
 func (gs *GroundStation) SetLoggerChannel(channel *LoggerDeviceChannel) {
 	gs.LoggerChannel = channel
+}
+
+func (gs *GroundStation) SetProgressTokenChannel(channel *ProgressTokenChannel) {
+	gs.ProgressTokenChannel = channel
 }
 
 func (gs *GroundStation) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
@@ -306,15 +318,21 @@ func (gs *GroundStation) establishConnection(toSatellite string) connections.INe
 	return newNetworkInterface
 }
 
-func (gs *GroundStation) SendPackets() {
+func (gs *GroundStation) SendPackets() float64 {
+	nextEventTime := 0.0
 	for !gs.EventQueue.IsEmpty() {
 		itemPopped := heap.Pop(&gs.EventQueue).(*connections.Item)
 		eventType := itemPopped.Value.Type
+		nextEventTime = itemPopped.Value.TimeStamp
+		if nextEventTime > gs.TimeStamp {
+			heap.Push(&gs.EventQueue, itemPopped)
+			break
+		}
 		if eventType == connections.SEND_EVENT {
 			packet := *itemPopped.Value.Data
 			if packet.Destination != gs.Name {
-				timeStamp := int(itemPopped.Value.TimeStamp/float64(gs.Dt)) * gs.Dt
-				forwardingSatellite := gs.ForwardingTable[timeStamp][packet.Destination]
+				roundedTimeStamp := int(nextEventTime/gs.Dt) * int(gs.Dt)
+				forwardingSatellite := gs.ForwardingTable[roundedTimeStamp][packet.Destination]
 				connection := gs.findConnection(forwardingSatellite)
 				packetDropped, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
 				if !packetDropped {
@@ -327,6 +345,7 @@ func (gs *GroundStation) SendPackets() {
 			}
 		}
 	}
+	return nextEventTime
 }
 
 func (gs *GroundStation) CheckIncomingConnection() {
@@ -357,12 +376,35 @@ func (gs *GroundStation) SendPendingRequests() {
 	}
 }
 
+func (gs *GroundStation) SendTimeStampAck(nextTimeStamp float64) {
+	if gs.lastAckTimeStamp < gs.TimeStamp && gs.TimeStamp < nextTimeStamp {
+		*gs.ProgressTokenChannel <- ProgressToken{
+			CurrentTimeStamp: gs.TimeStamp,
+			NextTimeStamp:    nextTimeStamp,
+		}
+		gs.lastAckTimeStamp = gs.TimeStamp
+	}
+}
+
+func (gs *GroundStation) CheckProgressToken() {
+	select {
+	case token := <-*gs.ProgressTokenChannel:
+		if token.CurrentTimeStamp > gs.TimeStamp {
+			gs.TimeStamp = token.CurrentTimeStamp
+		}
+	default:
+		return
+	}
+}
+
 func startGS(myGS IGroundStation) {
 	for {
+		myGS.CheckProgressToken()
 		myGS.CheckIncomingConnection()
 		myGS.ReceiveFromInterfaces()
 		myGS.SendPendingRequests()
-		myGS.SendPackets()
+		nextTimeStamp := myGS.SendPackets()
 		myGS.ProcessBuffers()
+		myGS.SendTimeStampAck(nextTimeStamp)
 	}
 }

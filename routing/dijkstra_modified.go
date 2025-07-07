@@ -7,7 +7,7 @@ import (
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
-func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp int, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) int {
+func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp float64, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) int {
 	distances := make([]float64, len(interfaces))
 	nextBestHopOrbit, nextBestHopId := helpers.GetOrbitAndSatelliteId(nextBestHop)
 
@@ -16,7 +16,7 @@ func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp int, interfaces []
 			distances[i] = math.Inf(1)
 		} else {
 			interfaceOrbit, interfaceId := helpers.GetOrbitAndSatelliteId(interfaces[i])
-			distances[i] = anomalyCalculation.CalculateDistanceBySatelliteId(nextBestHopId, nextBestHopOrbit, interfaceId, interfaceOrbit, 0.001*float64(timeStamp))
+			distances[i] = anomalyCalculation.CalculateDistanceBySatelliteId(nextBestHopId, nextBestHopOrbit, interfaceId, interfaceOrbit, 0.001*timeStamp)
 		}
 	}
 
