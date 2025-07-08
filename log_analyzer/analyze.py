@@ -113,36 +113,38 @@ def analyze(sim_csv: Path, gs_csv: Path) -> None:
                     .agg(Latency_ms=("Latency_ms", "mean"),
                         Avg_Hop=("Hop_count", "mean")))
     
-    # Calculate average latency and hops for all links
-    overall_mean = pd.DataFrame({
-        "FromDevice": ["ALL"], "ToDevice": ["ALL"],
-        "Latency_ms": [perf_metrics_df["Latency_ms"].mean()],
-        "Avg_Hop": [perf_metrics_df["Hop_count"].mean()]})
+    # 4. Calculate average latency and hops for all links
+    overall = (each_link_mean.sort_values(["FromDevice", "ToDevice"]).reset_index(drop=True))
 
-    # Combine all summary into overall
-    overall = (pd.concat([each_link_mean, overall_mean], ignore_index=True)
-                         .sort_values(["FromDevice", "ToDevice"])
-                         .reset_index(drop=True))
-
-    # 4. Calculate Stretch Factor
+    # 5. Calculate Stretch Factor
     pairwise_stretch_factor(gs_df, overall)
 
-    # 5. Calculate RTT
+    # 6. Calculate RTT
     pairwise_rtt(overall)
 
-    # 6. Starlink link usage
+    # 7. Starlink link usage
     satellite_df = pairwise_usage(sim_df)
     satellite_df.to_csv(results_folder / "link_usage.csv", index=False)
 
-    # 7. Calculate dropped packets
+    # 8. Calculate average latency and hops for all links
+    overall_mean = pd.DataFrame({
+        "FromDevice": ["ALL"], "ToDevice": ["ALL"],
+        "Latency_ms": [overall["Latency_ms"].mean()],
+        "Avg_Hop": [overall["Avg_Hop"].mean()],
+        "RTT_ms":          [overall["RTT_ms"].mean()],
+        "Stretch_factor":  [overall["Stretch_factor"].mean()]})
+    # 9. Combine all summary into overall
+    overall = (pd.concat([overall, overall_mean], ignore_index=True).sort_values(["FromDevice", "ToDevice"]).reset_index(drop=True))
+
+    # 10. Calculate dropped packets
     dropped_packets = sim_df.loc[sim_df["Event"] == "DROP", "PacketId"]
 
-    # 8. Total Throughput
+    # 11. Total Throughput
     delivered_set = set(sim_df.loc[sim_df["Event"] == "DELIVERED", "PacketId"])
     duration_s = (sim_df["TimeStamp(ms)"].max() - sim_df["TimeStamp(ms)"].min()) / 1000
     throughput = len(delivered_set) / duration_s
 
-    # 9. Print Results
+    # 12. Print Results
     show_results(overall, len(dropped_packets), len(delivered_set), throughput)
 
     return overall
