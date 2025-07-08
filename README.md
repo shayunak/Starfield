@@ -13,6 +13,7 @@ The following project is a packet-level routing multi-process simulator for Low 
 4. [Pandas](https://pandas.pydata.org/)
 5. [Numpy](https://numpy.org/)
 6. [Matplotlib](https://matplotlib.org/)
+7. [geopy 2.4.1](https://geopy.readthedocs.io/en/stable/index.html)
 
 ## Input Files
 1. **Ground Station Locations:** The file should be located in the `./configs` folder. The file has a _CSV_ format with the following column structure: ``Id,Latitude,Longitude``, where `Id` is the unique name of the ground station, `Latitude` is the latitude of the corresponding ground station, and `Longitude` is the longitude for the corresponding ground station.
