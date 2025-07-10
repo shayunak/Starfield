@@ -52,7 +52,6 @@ type ILogger interface {
 	GetDeviceNames() []string
 	GetRemainingUnprocessedPackets() int
 	ProcessEvent(event SimulationEvent, sourceIndex int)
-	CloseChannels()
 	InitChannelCases(selectCases *[]reflect.SelectCase)
 	logSimulationSummary()
 	Run(wg *sync.WaitGroup)
@@ -213,12 +212,6 @@ func (logger *Logger) InitChannelCases(selectCases *[]reflect.SelectCase) {
 	(*selectCases)[logger.GetNumberOfDevices()] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*logger.CoordinatorChannel)}
 }
 
-func (logger *Logger) CloseChannels() {
-	for _, channel := range *logger.GetDeviceChannels() {
-		close(*channel)
-	}
-}
-
 func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 	eventType := helpers.EVENT_SENT
 	packetId := -1
@@ -262,7 +255,6 @@ func startLogger(logger ILogger, wg *sync.WaitGroup) {
 			logger.ProcessEvent(simulationEvent, index)
 		}
 	}
-	logger.CloseChannels()
 	logger.logSimulationSummary()
 	wg.Done()
 }

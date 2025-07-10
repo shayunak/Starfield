@@ -82,7 +82,9 @@ func (coordinator *Coordinator) GetNumberOfAcksPerRound() int {
 
 func (coordinator *Coordinator) InitiateNewRound() {
 	coordinator.NumberOfAcksPerRound = 0
-	coordinator.TimeStamp = coordinator.NextTimeStamp
+	if coordinator.NextTimeStamp != coordinator.TotalSimulationTime {
+		coordinator.TimeStamp = coordinator.NextTimeStamp
+	}
 	for _, channel := range *coordinator.ProgressTokenChannels {
 		*channel <- ProgressToken{TimeStamp: coordinator.TimeStamp}
 	}
