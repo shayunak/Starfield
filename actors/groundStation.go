@@ -19,6 +19,7 @@ type GroundStation struct {
 	// General
 	Name                string
 	Dt                  float64 // in milliseconds
+	DistancesTimeStamp  float64 // in milliseconds
 	TimeStamp           float64 // in milliseconds
 	TotalSimulationTime float64 // in milliseconds
 
@@ -42,13 +43,14 @@ type GroundStation struct {
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
 	ProgressTokenChannel  *ProgressTokenChannel
+	AckTokenChannel       *AckTokenChannel
 	LinkerOutgoingChannel *LinkRequestChannel
 	LinkerIncomingChannel *LinkRequestChannel
 	PendingConnections    []LinkRequest
 }
 
 type IGroundStation interface {
-	getTimeStamp() float64
+	getDistancesTimeStamp() float64
 	getTotalSimulationTime() float64
 	GetName() string
 	// Distance Mode
@@ -62,6 +64,7 @@ type IGroundStation interface {
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetProgressTokenChannel(channel *ProgressTokenChannel)
+	SetAckTokenChannel(channel *AckTokenChannel)
 	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	GenerateTraffic(fromId int, traffic []TrafficEntry, maxPacketSize float64) (int, int)
@@ -83,8 +86,8 @@ func (gs *GroundStation) GetName() string {
 	return gs.Name
 }
 
-func (gs *GroundStation) getTimeStamp() float64 {
-	return gs.TimeStamp
+func (gs *GroundStation) getDistancesTimeStamp() float64 {
+	return gs.DistancesTimeStamp
 }
 
 func (gs *GroundStation) getTotalSimulationTime() float64 {
@@ -101,7 +104,8 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt float
 	newGS.Name = name
 	newGS.Dt = dt
 	newGS.TotalSimulationTime = totalSimulationTime
-	newGS.TimeStamp = 0.0
+	newGS.DistancesTimeStamp = 0.0
+	newGS.TimeStamp = -1.0
 
 	// Geo
 	newGS.Latitude = latitude
@@ -112,7 +116,7 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt float
 	newGS.HeadPointAnomalyEl = headPointAnomalyEl
 
 	// Packet Level Simulation
-	newGS.lastAckTimeStamp = 0.0
+	newGS.lastAckTimeStamp = -1.0
 
 	// Channels
 	newGS.InterfaceBufferSize = interfaceBufferSize
@@ -141,7 +145,7 @@ func (gs *GroundStation) GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
 }
 
 func (gs *GroundStation) nextTimeStep() {
-	gs.TimeStamp += gs.Dt
+	gs.DistancesTimeStamp += gs.Dt
 }
 
 func (gs *GroundStation) updatePosition() {
@@ -152,14 +156,14 @@ func (gs *GroundStation) updatePosition() {
 func (gs *GroundStation) logDistances() {
 	(*gs.DistanceLoggerChannel) <- UpdateDistancesMessage{
 		DeviceName: gs.Name,
-		TimeStamp:  int(gs.TimeStamp),
+		TimeStamp:  gs.DistancesTimeStamp,
 		Distances: gs.GSCalculation.FindSatellitesInRange(gs.Name, gs.HeadPointAscension, gs.HeadPointAnomalyEl,
-			float64(gs.TimeStamp)*0.001),
+			gs.DistancesTimeStamp*0.001),
 	}
 }
 
 func startGSDistances(myGS IGroundStation) {
-	for myGS.getTimeStamp() <= myGS.getTotalSimulationTime() {
+	for myGS.getDistancesTimeStamp() <= myGS.getTotalSimulationTime() {
 		myGS.logDistances()
 		myGS.nextTimeStep()
 		myGS.updatePosition()
@@ -179,6 +183,10 @@ func (gs *GroundStation) SetLoggerChannel(channel *LoggerDeviceChannel) {
 
 func (gs *GroundStation) SetProgressTokenChannel(channel *ProgressTokenChannel) {
 	gs.ProgressTokenChannel = channel
+}
+
+func (gs *GroundStation) SetAckTokenChannel(channel *AckTokenChannel) {
+	gs.AckTokenChannel = channel
 }
 
 func (gs *GroundStation) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
@@ -319,7 +327,7 @@ func (gs *GroundStation) establishConnection(toSatellite string) connections.INe
 }
 
 func (gs *GroundStation) SendPackets() float64 {
-	nextEventTime := 0.0
+	nextEventTime := gs.TotalSimulationTime
 	for !gs.EventQueue.IsEmpty() {
 		itemPopped := heap.Pop(&gs.EventQueue).(*connections.Item)
 		eventType := itemPopped.Value.Type
@@ -378,9 +386,9 @@ func (gs *GroundStation) SendPendingRequests() {
 
 func (gs *GroundStation) SendTimeStampAck(nextTimeStamp float64) {
 	if gs.lastAckTimeStamp < gs.TimeStamp && gs.TimeStamp < nextTimeStamp {
-		*gs.ProgressTokenChannel <- ProgressToken{
-			CurrentTimeStamp: gs.TimeStamp,
-			NextTimeStamp:    nextTimeStamp,
+		*gs.AckTokenChannel <- AckToken{
+			TimeStampAck:  gs.TimeStamp,
+			NextTimeStamp: nextTimeStamp,
 		}
 		gs.lastAckTimeStamp = gs.TimeStamp
 	}
@@ -389,9 +397,7 @@ func (gs *GroundStation) SendTimeStampAck(nextTimeStamp float64) {
 func (gs *GroundStation) CheckProgressToken() {
 	select {
 	case token := <-*gs.ProgressTokenChannel:
-		if token.CurrentTimeStamp > gs.TimeStamp {
-			gs.TimeStamp = token.CurrentTimeStamp
-		}
+		gs.TimeStamp = max(gs.TimeStamp, token.TimeStamp)
 	default:
 		return
 	}

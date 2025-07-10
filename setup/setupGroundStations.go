@@ -91,28 +91,35 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
-func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, actors.ProgressTokenChannels, []string) {
+func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels,
+	actors.LinkRequestChannels, actors.LinkRequestChannels,
+	actors.ProgressTokenChannels, actors.AckTokenChannels, []string) {
+
 	logChannels := make(actors.LoggerDeviceChannels, 0)
 	tokenChannels := make(actors.ProgressTokenChannels, 0)
+	ackChannels := make(actors.AckTokenChannels, 0)
 	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
 	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	groundStationNames := make([]string, 0)
 	for _, groundStation := range groundStations {
 		logChannel := make(actors.LoggerDeviceChannel)
 		tokenChannel := make(actors.ProgressTokenChannel, 1)
+		ackChannel := make(actors.AckTokenChannel, 1)
 		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
 		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
 		tokenChannels = append(tokenChannels, &tokenChannel)
+		ackChannels = append(ackChannels, &ackChannel)
 		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
 		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		groundStationNames = append(groundStationNames, groundStation.GetName())
 		groundStation.SetLoggerChannel(&logChannel)
 		groundStation.SetProgressTokenChannel(&tokenChannel)
+		groundStation.SetAckTokenChannel(&ackChannel)
 		groundStation.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		groundStation.Run()
 	}
-	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, groundStationNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, ackChannels, groundStationNames
 }
 
 func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {

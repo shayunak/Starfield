@@ -17,8 +17,8 @@ import (
 type Logger struct {
 	ConsellationName    string
 	TimeStep            int
-	TimeStamp           int
-	TotalSimulationTime int // in seconds
+	TimeStamp           float64 // in milliseconds
+	TotalSimulationTime float64 // in milliseconds
 	// Simulation Mode
 	CoordinatorChannel          *chan float64
 	LoggerDeviceChannels        *LoggerDeviceChannels
@@ -45,7 +45,7 @@ type ILogger interface {
 	logDistancesSimulationSummary()
 	// Simulation Mode
 	IsInRangeSimulationTime() bool
-	UpdateTimeStamp(newTimeStamp int)
+	UpdateTimeStamp(newTimeStamp float64)
 	SetDeviceChannels(channels *LoggerDeviceChannels, deviceNames []string)
 	GetNumberOfDevices() int
 	GetDeviceChannels() *LoggerDeviceChannels
@@ -57,10 +57,10 @@ type ILogger interface {
 	logSimulationSummary()
 	Run(wg *sync.WaitGroup)
 	// General
-	GetTotalSimulationTime() int
+	GetTotalSimulationTime() float64
 }
 
-func (logger *Logger) GetTotalSimulationTime() int {
+func (logger *Logger) GetTotalSimulationTime() float64 {
 	return logger.TotalSimulationTime
 }
 
@@ -68,7 +68,7 @@ func (logger *Logger) GetTotalSimulationTime() int {
 
 type UpdateDistancesMessage struct {
 	DeviceName string
-	TimeStamp  int
+	TimeStamp  float64 // in milliseconds
 	Distances  map[string]float64
 }
 
@@ -109,7 +109,7 @@ func (logger *Logger) addNewDistanceEntries(distancesMessage UpdateDistancesMess
 	devices := distancesMessage.Distances
 	for deviceId, distance := range devices {
 		logger.addNewDistanceEntry(&helpers.DistanceEntry{
-			TimeStamp:  distancesMessage.TimeStamp,
+			TimeStamp:  int(distancesMessage.TimeStamp),
 			FromDevice: distancesMessage.DeviceName,
 			ToDevice:   deviceId,
 			Distance:   int(distance),
@@ -145,7 +145,7 @@ func (logger *Logger) logDistancesSimulationSummary() {
 	}
 
 	fileName := fmt.Sprintf("./generated/Distances#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
-		logger.ConsellationName, logger.TimeStep, logger.TotalSimulationTime)
+		logger.ConsellationName, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
 	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)
@@ -193,7 +193,7 @@ func (logger *Logger) IsInRangeSimulationTime() bool {
 	return logger.TimeStamp < logger.TotalSimulationTime
 }
 
-func (logger *Logger) UpdateTimeStamp(newTimeStamp int) {
+func (logger *Logger) UpdateTimeStamp(newTimeStamp float64) {
 	logger.TimeStamp = newTimeStamp
 }
 
@@ -249,13 +249,12 @@ func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 }
 
 func startLogger(logger ILogger, wg *sync.WaitGroup) {
-	//println("Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 	for logger.GetRemainingUnprocessedPackets() > 0 && logger.IsInRangeSimulationTime() {
 		selectDevicesCases := make([]reflect.SelectCase, logger.GetNumberOfDevices()+1)
 		logger.InitChannelCases(&selectDevicesCases)
 		index, value, _ := reflect.Select(selectDevicesCases)
 		if index == logger.GetNumberOfDevices() { // Coordinator channel
-			timeStamp := value.Interface().(int)
+			timeStamp := value.Interface().(float64)
 			logger.UpdateTimeStamp(timeStamp)
 			log.Default().Println("Time Progress: ", timeStamp, " ms, Remaining Unprocessed Packets: ", logger.GetRemainingUnprocessedPackets())
 		} else {
@@ -281,7 +280,7 @@ func (logger *Logger) logSimulationSummary() {
 	}
 
 	fileName := fmt.Sprintf("./generated/SimulationSummary#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
-		logger.ConsellationName, logger.TimeStep, logger.TotalSimulationTime)
+		logger.ConsellationName, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
 	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)

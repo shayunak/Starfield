@@ -48,7 +48,7 @@ def satellite_usage_plot(results_dir: str) -> None:
     plt.figure()
     plt.plot(satellite_df["UsageCount"].values,drawstyle="steps-post", color='orange',label="Link usage")
     plt.xlabel("Links ordered by usage")
-    plt.ylabel("No. of paths using a link")
+    plt.ylabel("No. of packets using a link")
     plt.title('Inter-Satellite Link (ISL) Usage Frequency', fontsize=14)
     plt.grid(True)
     plt.legend()

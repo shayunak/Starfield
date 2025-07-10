@@ -59,28 +59,35 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	}
 }
 
-func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels, actors.LinkRequestChannels, actors.LinkRequestChannels, actors.ProgressTokenChannels, []string) {
+func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels,
+	actors.LinkRequestChannels, actors.LinkRequestChannels,
+	actors.ProgressTokenChannels, actors.AckTokenChannels, []string) {
+
 	logChannels := make(actors.LoggerDeviceChannels, 0)
 	tokenChannels := make(actors.ProgressTokenChannels, 0)
+	ackChannels := make(actors.AckTokenChannels, 0)
 	linkIncomingChannels := make(actors.LinkRequestChannels, 0)
 	linkOutgoingChannels := make(actors.LinkRequestChannels, 0)
 	satelliteNames := make([]string, 0)
 	for _, satellite := range satellites {
 		logChannel := make(actors.LoggerDeviceChannel)
 		tokenChannel := make(actors.ProgressTokenChannel, 1)
+		ackChannel := make(actors.AckTokenChannel, 1)
 		linkIncomingChannel := make(actors.LinkRequestChannel, 5)
 		linkOutgoingChannel := make(actors.LinkRequestChannel, 5)
 		logChannels = append(logChannels, &logChannel)
 		tokenChannels = append(tokenChannels, &tokenChannel)
+		ackChannels = append(ackChannels, &ackChannel)
 		linkIncomingChannels = append(linkIncomingChannels, &linkIncomingChannel)
 		linkOutgoingChannels = append(linkOutgoingChannels, &linkOutgoingChannel)
 		satelliteNames = append(satelliteNames, satellite.GetName())
 		satellite.SetLoggerChannel(&logChannel)
 		satellite.SetProgressTokenChannel(&tokenChannel)
+		satellite.SetAckTokenChannel(&ackChannel)
 		satellite.SetLinkerChannels(&linkIncomingChannel, &linkOutgoingChannel)
 		satellite.Run()
 	}
-	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, satelliteNames
+	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, ackChannels, satelliteNames
 }
 
 func startDistancesSatellites(satellites SatelliteList) actors.DistanceLoggerDeviceChannels {

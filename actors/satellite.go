@@ -18,6 +18,7 @@ type Satellite struct {
 	Name                string
 	Id                  int
 	Dt                  float64 // in milliseconds
+	DistancesTimeStamp  float64 // in milliseconds
 	TimeStamp           float64 // in milliseconds
 	TotalSimulationTime float64 // in milliseconds
 
@@ -45,13 +46,14 @@ type Satellite struct {
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
 	ProgressTokenChannel  *ProgressTokenChannel
+	AckTokenChannel       *AckTokenChannel
 	PendingConnections    []LinkRequest
 }
 
 type ISatellite interface {
 	// General
 	GetName() string
-	getTimeStamp() float64
+	getDistancesTimeStamp() float64
 	getTotalSimulationTime() float64
 	// Distance Mode
 	RunDistances()
@@ -67,6 +69,7 @@ type ISatellite interface {
 	Run()
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetProgressTokenChannel(channel *ProgressTokenChannel)
+	SetAckTokenChannel(channel *AckTokenChannel)
 	SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel)
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	ReceiveFromInterfaces()
@@ -89,8 +92,8 @@ func (satellite *Satellite) GetName() string {
 	return satellite.Name
 }
 
-func (satellite *Satellite) getTimeStamp() float64 {
-	return satellite.TimeStamp
+func (satellite *Satellite) getDistancesTimeStamp() float64 {
+	return satellite.DistancesTimeStamp
 }
 
 func (satellite *Satellite) getTotalSimulationTime() float64 {
@@ -108,7 +111,8 @@ func NewSatellite(id int, orbitalPhase float64, dt float64, totalSimulationTime 
 	newSatellite.Name = fmt.Sprintf("%s-%d", orbit.GetOrbitId(), id)
 	newSatellite.Dt = dt
 	newSatellite.TotalSimulationTime = totalSimulationTime
-	newSatellite.TimeStamp = 0
+	newSatellite.DistancesTimeStamp = 0.0
+	newSatellite.TimeStamp = -1.0
 
 	// Geo
 	newSatellite.OrbitalAnomaly = orbitalPhase * (math.Pi / 180.0)
@@ -121,7 +125,7 @@ func NewSatellite(id int, orbitalPhase float64, dt float64, totalSimulationTime 
 	}
 
 	// Packet Level Simulation
-	newSatellite.lastAckTimeStamp = 0.0
+	newSatellite.lastAckTimeStamp = -1.0
 
 	// Channels
 	newSatellite.InterfaceBufferSize = interfaceBufferSize
@@ -159,7 +163,7 @@ func (satellite *Satellite) updatePosition() {
 }
 
 func (satellite *Satellite) nextTimeStep() {
-	satellite.TimeStamp += satellite.Dt
+	satellite.DistancesTimeStamp += satellite.Dt
 }
 
 func mergeMaps(satelliteMap map[string]float64, groundStationMap map[string]float64) map[string]float64 {
@@ -179,11 +183,11 @@ func (satellite *Satellite) findSatellitesInRange() map[string]float64 {
 	satelliteOrbitalAscension := satellite.Orbit.GetAscension()
 	lengthLimitRatio := satellite.AnomalyCalculations.GetLengthLimitRatio()
 	return satellite.AnomalyCalculations.FindSatellitesInRange(satellite.Name, lengthLimitRatio, satellite.AnomalyElements,
-		satelliteOrbitalAscension, float64(satellite.TimeStamp)*0.001)
+		satelliteOrbitalAscension, satellite.DistancesTimeStamp*0.001)
 }
 
 func (satellite *Satellite) findGroundStationsInRange() map[string]float64 {
-	return satellite.GroundStationCalculations.GetCoveringGroundStations(float64(satellite.TimeStamp)*0.001, satellite.OrbitalAnomaly,
+	return satellite.GroundStationCalculations.GetCoveringGroundStations(satellite.DistancesTimeStamp*0.001, satellite.OrbitalAnomaly,
 		satellite.Orbit)
 }
 
@@ -193,13 +197,13 @@ func (satellite *Satellite) logDistances() {
 
 	(*satellite.DistanceLoggerChannel) <- UpdateDistancesMessage{
 		DeviceName: satellite.Name,
-		TimeStamp:  int(satellite.TimeStamp),
+		TimeStamp:  satellite.DistancesTimeStamp,
 		Distances:  mergeMaps(satelliteDistances, groundStationDistances),
 	}
 }
 
 func startSatelliteDistances(mySatellite ISatellite) {
-	for mySatellite.getTimeStamp() <= mySatellite.getTotalSimulationTime() {
+	for mySatellite.getDistancesTimeStamp() <= mySatellite.getTotalSimulationTime() {
 		mySatellite.logDistances()
 		mySatellite.nextTimeStep()
 		mySatellite.updatePosition()
@@ -225,6 +229,10 @@ func (satellite *Satellite) SetProgressTokenChannel(channel *ProgressTokenChanne
 	satellite.ProgressTokenChannel = channel
 }
 
+func (satellite *Satellite) SetAckTokenChannel(channel *AckTokenChannel) {
+	satellite.AckTokenChannel = channel
+}
+
 func (satellite *Satellite) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
 	satellite.LinkerIncomingChannel = ingoingChannel
 	satellite.LinkerOutgoingChannel = outgoingChannel
@@ -244,7 +252,6 @@ func (satellite *Satellite) AddISLConnectionOnId(id int, connectedDevice string,
 	if satellite.AvailableISL <= 0 {
 		return false
 	}
-	println("Adding ISL connection on id: ", id, " for satellite: ", satellite.Name, " to device: ", connectedDevice)
 	satellite.ISLInterfaces[id].ChangeSendLink(connectedDevice, sendChannel)
 	satellite.ISLInterfaces[id].ChangeReceiveLink(connectedDevice, receiveChannel)
 	satellite.AvailableISL--
@@ -261,7 +268,7 @@ func (satellite *Satellite) findAvailableISLInterfaceId() int {
 }
 
 func (satellite *Satellite) Run() {
-	log.Default().Println("Running satellite: ", satellite.Id)
+	log.Default().Println("Running satellite: ", satellite.Name)
 	go startSatellite(satellite)
 }
 
@@ -399,9 +406,9 @@ func (satellite *Satellite) establishGSLConnection(toGroundStation string) conne
 
 func (satellite *Satellite) SendTimeStampAck(nextTimeStamp float64) {
 	if satellite.lastAckTimeStamp < satellite.TimeStamp && satellite.TimeStamp < nextTimeStamp {
-		*satellite.ProgressTokenChannel <- ProgressToken{
-			CurrentTimeStamp: satellite.TimeStamp,
-			NextTimeStamp:    nextTimeStamp,
+		*satellite.AckTokenChannel <- AckToken{
+			TimeStampAck:  satellite.TimeStamp,
+			NextTimeStamp: nextTimeStamp,
 		}
 		satellite.lastAckTimeStamp = satellite.TimeStamp
 	}
@@ -410,16 +417,14 @@ func (satellite *Satellite) SendTimeStampAck(nextTimeStamp float64) {
 func (satellite *Satellite) CheckProgressToken() {
 	select {
 	case token := <-*satellite.ProgressTokenChannel:
-		if token.CurrentTimeStamp > satellite.TimeStamp {
-			satellite.TimeStamp = token.CurrentTimeStamp
-		}
+		satellite.TimeStamp = max(satellite.TimeStamp, token.TimeStamp)
 	default:
 		return
 	}
 }
 
 func (satellite *Satellite) SendPackets() float64 {
-	nextEventTime := 0.0
+	nextEventTime := satellite.TotalSimulationTime
 	for !satellite.EventQueue.IsEmpty() {
 		itemPopped := heap.Pop(&satellite.EventQueue).(*connections.Item)
 		eventType := itemPopped.Value.Type
@@ -433,7 +438,7 @@ func (satellite *Satellite) SendPackets() float64 {
 			roundedTimeStamp := int(nextEventTime/satellite.Dt) * int(satellite.Dt)
 			forwardingChoice := satellite.ForwardingTable[roundedTimeStamp][packet.Destination]
 			if satellite.Orbit.IsOwnerSatellite(forwardingChoice) {
-				interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, satellite.getTimeStamp(), satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
+				interfaceId := routing.DijkstraModifiedOnGridPlus(forwardingChoice, nextEventTime, satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
 				if interfaceId != -1 {
 					packetDropped, timeOfAttempt := satellite.ISLInterfaces[interfaceId].Send(packet, itemPopped.Value.TimeStamp)
 					if !packetDropped {

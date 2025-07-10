@@ -66,7 +66,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimulationTime int, totalNumberOfPackets int) *chan float64 {
 	coordinatorChannel := make(chan float64, 1)
 	*logger = &actors.Logger{
-		TotalSimulationTime:         totalSimulationTime * 1000, // in milliseconds
+		TotalSimulationTime:         float64(totalSimulationTime) * 1000, // in milliseconds
 		LoggerDeviceChannels:        nil,
 		CoordinatorChannel:          &coordinatorChannel,
 		DistancesLoggerChannels:     nil,
@@ -94,6 +94,7 @@ func initCoordinator(coordinator *actors.ICoordinator, loggerChannel *chan float
 		ProgressTokenChannels: nil,
 		LoggerChannel:         loggerChannel,
 		TimeStamp:             0,
+		NextTimeStamp:         0,
 		NumberOfAcksPerRound:  0,
 		TotalSimulationTime:   float64(totalSimulationTime) * 1000.0, // in milliseconds
 	}
@@ -179,18 +180,21 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteAckChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationAckChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
 	tokenChannels := append(groundStationTokenChannels, satelliteTokenChannels...)
+	ackChannels := append(groundStationAckChannels, satelliteAckChannels...)
 	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
 	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
 	coordinator.SetProgressTokenChannels(&tokenChannels)
+	coordinator.SetAckTokenChannels(&ackChannels)
 	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()
+	coordinator.Run()
 }
 
 func SetupForwardingSimulation(configFileName string, groundStationFileName string, trafficFile string, forwardingFolder string,
@@ -241,16 +245,19 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	initTopology(satellites, topologyList)
 
 	// starting the actors
-	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteNames := startSatellites(satellites)
-	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationNames := startGroundStations(groundStations)
+	satelliteLogChannels, satelliteIncomingLinkChannels, satelliteOutgoingLinkChannels, satelliteTokenChannels, satelliteAckChannels, satelliteNames := startSatellites(satellites)
+	groundStationLogChannels, groundStationIncomingLinkChannels, groundStationOutgoingLinkChannels, groundStationTokenChannels, groundStationAckChannels, groundStationNames := startGroundStations(groundStations)
 	logChannels := append(groundStationLogChannels, satelliteLogChannels...)
 	tokenChannels := append(groundStationTokenChannels, satelliteTokenChannels...)
+	ackChannels := append(groundStationAckChannels, satelliteAckChannels...)
 	linkerIncomingChannels := append(groundStationOutgoingLinkChannels, satelliteOutgoingLinkChannels...)
 	linkerOutgoingChannels := append(groundStationIncomingLinkChannels, satelliteIncomingLinkChannels...)
 	names := append(groundStationNames, satelliteNames...)
 	logger.SetDeviceChannels(&logChannels, names)
 	coordinator.SetProgressTokenChannels(&tokenChannels)
+	coordinator.SetAckTokenChannels(&ackChannels)
 	linker.SetDeviceChannels(&linkerIncomingChannels, &linkerOutgoingChannels, names)
 	logger.Run(simulationDone)
 	linker.Run()
+	coordinator.Run()
 }
