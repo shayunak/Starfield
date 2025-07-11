@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
     sim_csv_path = repo_root / "generated" / sim_csv_name
     gs_csv_path  = repo_root / "configs"  / gs_csv_name
-    results_folder = repo_root / "results" / f'AnalysisOf{sim_csv_name}'
+    results_folder = repo_root / "results" / f'AnalysisOf{sim_csv_name[:-4]}'
 
     os.makedirs(results_folder, exist_ok=True)
 

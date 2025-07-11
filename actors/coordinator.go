@@ -82,9 +82,7 @@ func (coordinator *Coordinator) GetNumberOfAcksPerRound() int {
 
 func (coordinator *Coordinator) InitiateNewRound() {
 	coordinator.NumberOfAcksPerRound = 0
-	if coordinator.NextTimeStamp != coordinator.TotalSimulationTime {
-		coordinator.TimeStamp = coordinator.NextTimeStamp
-	}
+	coordinator.TimeStamp = coordinator.NextTimeStamp
 	for _, channel := range *coordinator.ProgressTokenChannels {
 		*channel <- ProgressToken{TimeStamp: coordinator.TimeStamp}
 	}
@@ -99,12 +97,11 @@ func (coordinator *Coordinator) ProcessAckToken(token AckToken) {
 
 func startCoordinator(coordinator ICoordinator) {
 	coordinator.InitiateNewRound()
-	for coordinator.GetTimeStamp() < coordinator.GetTotalSimulationTime() {
+	for coordinator.GetTimeStamp() <= coordinator.GetTotalSimulationTime() {
 		selectDevicesCases := make([]reflect.SelectCase, coordinator.GetNumberOfDevices())
 		coordinator.InitChannelCases(&selectDevicesCases)
 		_, value, _ := reflect.Select(selectDevicesCases)
 		AckToken := value.Interface().(AckToken)
-		//println("Coordinator received token with timestamp:", progressToken.CurrentTimeStamp, "from index:", index, " left acks: ", coordinator.GetNumberOfAcksPerRound())
 		coordinator.ProcessAckToken(AckToken)
 		if coordinator.GetNumberOfAcksPerRound() == coordinator.GetNumberOfDevices() {
 			coordinator.InitiateNewRound()

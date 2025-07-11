@@ -44,7 +44,6 @@ type ILogger interface {
 	addNewDistanceEntry(entry *helpers.DistanceEntry)
 	logDistancesSimulationSummary()
 	// Simulation Mode
-	IsInRangeSimulationTime() bool
 	UpdateTimeStamp(newTimeStamp float64)
 	SetDeviceChannels(channels *LoggerDeviceChannels, deviceNames []string)
 	GetNumberOfDevices() int
@@ -188,10 +187,6 @@ func (logger *Logger) GetDeviceNames() []string {
 	return logger.DeviceNames
 }
 
-func (logger *Logger) IsInRangeSimulationTime() bool {
-	return logger.TimeStamp < logger.TotalSimulationTime
-}
-
 func (logger *Logger) UpdateTimeStamp(newTimeStamp float64) {
 	logger.TimeStamp = newTimeStamp
 }
@@ -242,7 +237,7 @@ func (logger *Logger) ProcessEvent(event SimulationEvent, sourceIndx int) {
 }
 
 func startLogger(logger ILogger, wg *sync.WaitGroup) {
-	for logger.GetRemainingUnprocessedPackets() > 0 && logger.IsInRangeSimulationTime() {
+	for logger.GetRemainingUnprocessedPackets() > 0 {
 		selectDevicesCases := make([]reflect.SelectCase, logger.GetNumberOfDevices()+1)
 		logger.InitChannelCases(&selectDevicesCases)
 		index, value, _ := reflect.Select(selectDevicesCases)
