@@ -160,10 +160,19 @@ def analyze(sim_csv: Path, gs_csv: Path) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Error: Need exactly two arguments!")
+    if len(sys.argv) < 2:
+        print("Please provide an option or a file name as a command line argument!")
         printHelp()
-        sys.exit(1)
+        exit(1)
+    
+    if sys.argv[1] == "--help":
+        printHelp()
+        exit(1)
+    elif len(sys.argv) != 3:
+        print("Invalid Option or Missing Arguments!")
+        printHelp()
+        exit(1)
+
 
     sim_csv_name = sys.argv[1]
     gs_csv_name  = sys.argv[2]

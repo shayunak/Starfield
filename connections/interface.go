@@ -30,15 +30,17 @@ type NetworkInterface struct {
 }
 
 type INetworkInterface interface {
-	IsBufferEmpty() bool
+	IsBufferNotEmpty() bool
 	Send(packet Packet, timeOfEvent float64) (bool, int)
 	Receive() []Event
 	HasReceiveChannel() bool
 	HasSendChannel() bool
+	GetReceiveChannel() *chan Packet
 	GetDeviceConnectedTo() string
 	GetDeviceOwner() string
 	GetLink() ILink
 	ProcessBuffer()
+	ProcessReceivedPacket(packet *Packet) Event
 	ChangeSendLink(newDeviceConnectedTo string, newSendChannel *chan Packet)
 	ChangeReceiveLink(newDeviceConnectedTo string, newReceiveChannel *chan Packet)
 	CloseSendSideConnection()
@@ -55,8 +57,8 @@ type ILink interface {
 	Clone() ILink
 }
 
-func (networkInterface *NetworkInterface) IsBufferEmpty() bool {
-	return len(networkInterface.Buffer) == 0
+func (networkInterface *NetworkInterface) IsBufferNotEmpty() bool {
+	return len(networkInterface.Buffer) != 0
 }
 
 func (networkInterface *NetworkInterface) HasReceiveChannel() bool {
@@ -65,6 +67,10 @@ func (networkInterface *NetworkInterface) HasReceiveChannel() bool {
 
 func (networkInterface *NetworkInterface) HasSendChannel() bool {
 	return networkInterface.SendChannel != nil
+}
+
+func (networkInterface *NetworkInterface) GetReceiveChannel() *chan Packet {
+	return networkInterface.ReceiveChannel
 }
 
 func (networkInterface *NetworkInterface) Clone() INetworkInterface {
@@ -158,9 +164,18 @@ func (networkInterface *NetworkInterface) CloseReceiveSideConnection() {
 	}
 }
 
+func (networkInterface *NetworkInterface) ProcessReceivedPacket(packet *Packet) Event {
+	networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packet.PacketSentTime)
+	lastTimeStampRead := packet.PacketSentTime + networkInterface.Link.CalculateDeliveryTime(*packet)
+	return Event{
+		TimeStamp: lastTimeStampRead,
+		Type:      SEND_EVENT,
+		Data:      packet,
+	}
+}
+
 func (networkInterface *NetworkInterface) Receive() []Event {
 	recievedEvents := make([]Event, 0)
-	lastTimeStampRead := 0.0
 	channelEmpty := false
 	for !channelEmpty {
 		select {
@@ -170,13 +185,7 @@ func (networkInterface *NetworkInterface) Receive() []Event {
 				//networkInterface.CloseReceiveSideConnection() no packet order
 				break
 			}
-			networkInterface.Link.UpdateDistance(networkInterface.InterfaceOwner, networkInterface.DeviceConnectedTo, 0.001*packet.PacketSentTime)
-			lastTimeStampRead = packet.PacketSentTime + networkInterface.Link.CalculateDeliveryTime(packet)
-			event := Event{
-				TimeStamp: lastTimeStampRead,
-				Type:      SEND_EVENT,
-				Data:      &packet,
-			}
+			event := networkInterface.ProcessReceivedPacket(&packet)
 			recievedEvents = append(recievedEvents, event)
 		default:
 			channelEmpty = true

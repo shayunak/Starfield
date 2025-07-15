@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"reflect"
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
@@ -67,6 +68,7 @@ type ISatellite interface {
 	// Simulation Mode
 	GetNumberOfPackets() int
 	Run()
+	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
 	SetLoggerChannel(channel *LoggerDeviceChannel)
 	SetProgressTokenChannel(channel *ProgressTokenChannel)
 	SetAckTokenChannel(channel *AckTokenChannel)
@@ -74,12 +76,17 @@ type ISatellite interface {
 	SetForwardingTable(forwardingTable map[int]ForwardingEntry)
 	ReceiveFromInterfaces()
 	SendPackets() float64
-	CheckIncomingConnection()
-	CheckProgressToken()
 	SendTimeStampAck(nextTimeStamp float64)
 	SendPendingRequests()
 	ProcessBuffers()
-	AddISLConnectionOnId(id int, connectedDevice string, receiveChannel *chan connections.Packet, sendChannel *chan connections.Packet) bool
+	ProcessIncomingConnection(linkReq LinkRequest)
+	CheckIncomingConnections()
+	InitChannelCases(selectCases *[]reflect.SelectCase) []string
+	WatchEvents()
+	IsBlocking() bool
+	areAllBuffersEmpty() bool
+	getReceiveGSL() ([]*chan connections.Packet, []string)
+	getReceiveISL() []*chan connections.Packet
 	findGSLConnection(toGroundStation string) connections.INetworkInterface
 	findAvailableISLInterfaceId() int
 	getISLInterfaceNames() []string
@@ -238,6 +245,26 @@ func (satellite *Satellite) SetLinkerChannels(ingoingChannel *LinkRequestChannel
 	satellite.LinkerOutgoingChannel = outgoingChannel
 }
 
+func (satellite *Satellite) areAllBuffersEmpty() bool {
+	for _, inface := range satellite.GSLInterfaces {
+		if inface.HasSendChannel() && inface.IsBufferNotEmpty() {
+			return false
+		}
+	}
+	for _, inface := range satellite.ISLInterfaces {
+		if inface.HasSendChannel() && inface.IsBufferNotEmpty() {
+			return false
+		}
+	}
+	return true
+}
+
+func (satellite *Satellite) IsBlocking() bool {
+	return len(satellite.PendingConnections) == 0 &&
+		satellite.areAllBuffersEmpty() &&
+		(len(satellite.EventQueue) == 0 || satellite.TimeStamp <= satellite.lastAckTimeStamp)
+}
+
 func (satellite *Satellite) getISLInterfaceNames() []string {
 	satelliteNames := make([]string, len(satellite.ISLInterfaces))
 
@@ -285,19 +312,26 @@ func (satellite *Satellite) ProcessBuffers() {
 	}
 }
 
-func (satellite *Satellite) CheckIncomingConnection() {
-	select {
-	case linkReq := <-*satellite.LinkerIncomingChannel:
-		inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
-		if found {
-			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
-		} else {
-			newInterface := satellite.GSLInterfaceSample.Clone()
-			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
-			satellite.GSLInterfaces[linkReq.FromDevice] = newInterface
+func (satellite *Satellite) CheckIncomingConnections() {
+	channelEmpty := false
+	for !channelEmpty {
+		select {
+		case linkReq := <-*satellite.LinkerIncomingChannel:
+			satellite.ProcessIncomingConnection(linkReq)
+		default:
+			channelEmpty = true
 		}
-	default:
-		return
+	}
+}
+
+func (satellite *Satellite) ProcessIncomingConnection(linkReq LinkRequest) {
+	inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
+	if found {
+		inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+	} else {
+		newInterface := satellite.GSLInterfaceSample.Clone()
+		newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		satellite.GSLInterfaces[linkReq.FromDevice] = newInterface
 	}
 }
 
@@ -414,13 +448,49 @@ func (satellite *Satellite) SendTimeStampAck(nextTimeStamp float64) {
 	}
 }
 
-func (satellite *Satellite) CheckProgressToken() {
-	select {
-	case token := <-*satellite.ProgressTokenChannel:
-		satellite.TimeStamp = max(satellite.TimeStamp, token.TimeStamp)
-	default:
-		return
+func (satellite *Satellite) getReceiveGSL() ([]*chan connections.Packet, []string) {
+	channels := make([]*chan connections.Packet, 0)
+	channelOwners := make([]string, 0)
+	for gsName, inface := range satellite.GSLInterfaces {
+		if inface.GetDeviceConnectedTo() != "" {
+			if inface.HasReceiveChannel() {
+				channels = append(channels, inface.GetReceiveChannel())
+				channelOwners = append(channelOwners, gsName)
+			}
+		} else {
+			delete(satellite.GSLInterfaces, gsName)
+		}
 	}
+	return channels, channelOwners
+}
+
+func (satellite *Satellite) getReceiveISL() []*chan connections.Packet {
+	channels := make([]*chan connections.Packet, 0)
+	for indx, inface := range satellite.ISLInterfaces {
+		if inface.GetDeviceConnectedTo() != "" {
+			if inface.HasReceiveChannel() {
+				channels = append(channels, inface.GetReceiveChannel())
+			}
+		} else {
+			satellite.ISLInterfaces = append(satellite.ISLInterfaces[:indx], satellite.ISLInterfaces[indx+1:]...)
+		}
+	}
+	return channels
+}
+
+func (satellite *Satellite) InitChannelCases(selectCases *[]reflect.SelectCase) []string {
+	channelsGSL, channelGSLOwners := satellite.getReceiveGSL()
+	channelsISL := satellite.getReceiveISL()
+	*selectCases = make([]reflect.SelectCase, len(channelsGSL)+len(channelsISL)+2)
+	(*selectCases)[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*satellite.ProgressTokenChannel)}
+	(*selectCases)[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*satellite.LinkerIncomingChannel)}
+	for i, channel := range channelsGSL {
+		(*selectCases)[i+2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
+	for i, channel := range channelsISL {
+		(*selectCases)[i+len(channelGSLOwners)+2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
+	return channelGSLOwners
 }
 
 func (satellite *Satellite) SendPackets() float64 {
@@ -459,14 +529,43 @@ func (satellite *Satellite) SendPackets() float64 {
 				}
 			}
 		}
+		nextEventTime = satellite.TotalSimulationTime
 	}
 	return nextEventTime
 }
 
+func (satellite *Satellite) WatchEvents() {
+	var selectIncomingChannelsCases []reflect.SelectCase
+	channelGSLOwners := satellite.InitChannelCases(&selectIncomingChannelsCases)
+	indx, value, _ := reflect.Select(selectIncomingChannelsCases)
+	switch indx {
+	case 0:
+		token := value.Interface().(ProgressToken)
+		satellite.TimeStamp = max(satellite.TimeStamp, token.TimeStamp)
+	case 1:
+		linkReq := value.Interface().(LinkRequest)
+		satellite.ProcessIncomingConnection(linkReq)
+	default:
+		var inface connections.INetworkInterface
+		if indx < (len(channelGSLOwners) + 2) {
+			inface = satellite.GSLInterfaces[channelGSLOwners[indx-2]]
+		} else {
+			inface = satellite.ISLInterfaces[indx-len(channelGSLOwners)-2]
+		}
+		packet := value.Interface().(connections.Packet)
+		event := inface.ProcessReceivedPacket(&packet)
+		item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+		heap.Push(&satellite.EventQueue, &item)
+		satellite.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
+	}
+}
+
 func startSatellite(mySatellite ISatellite) {
 	for {
-		mySatellite.CheckProgressToken()
-		mySatellite.CheckIncomingConnection()
+		if mySatellite.IsBlocking() {
+			mySatellite.WatchEvents()
+		}
+		mySatellite.CheckIncomingConnections()
 		mySatellite.ReceiveFromInterfaces()
 		mySatellite.SendPendingRequests()
 		nextTimeStamp := mySatellite.SendPackets()

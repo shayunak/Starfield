@@ -2,6 +2,7 @@ package actors
 
 import (
 	"log"
+	"reflect"
 	"slices"
 
 	"github.com/shayunak/SatSimGo/connections"
@@ -30,10 +31,11 @@ type ILinker interface {
 	GetNumberOfDevices() int
 	GetIncomingRequestChannels() *LinkRequestChannels
 	GetOutgoingRequestChannels() *LinkRequestChannels
+	InitChannelCases(selectCases *[]reflect.SelectCase)
 	sendRequest(request LinkRequest) bool
-	addPendingRequests(request []LinkRequest)
+	addPendingRequest(request LinkRequest)
 	processRequests()
-	checkIncomingRequests() []LinkRequest
+	isPendingConnectionsEmpty() bool
 	Run()
 }
 
@@ -49,33 +51,36 @@ func (linker *Linker) GetOutgoingRequestChannels() *LinkRequestChannels {
 	return linker.LinkRelayRequestChannels
 }
 
+func (linker *Linker) isPendingConnectionsEmpty() bool {
+	return len(linker.PendingConnections) == 0
+}
+
 func (linker *Linker) SetDeviceChannels(incomingChannels *LinkRequestChannels, outgoingChannels *LinkRequestChannels, deviceNames []string) {
 	linker.LinkIncomingRequestChannels = incomingChannels
 	linker.LinkRelayRequestChannels = outgoingChannels
 	linker.DeviceNames = deviceNames
 }
 
-func (linker *Linker) addPendingRequests(requests []LinkRequest) {
-	linker.PendingConnections = append(linker.PendingConnections, requests...)
+func (linker *Linker) addPendingRequest(request LinkRequest) {
+	linker.PendingConnections = append(linker.PendingConnections, request)
 }
 
-func (linker *Linker) checkIncomingRequests() []LinkRequest {
-	requests := make([]LinkRequest, 0)
-	for _, channel := range *linker.GetIncomingRequestChannels() {
-		select {
-		case request := <-*channel:
-			requests = append(requests, request)
-		default:
-			continue
-		}
+func (linker *Linker) InitChannelCases(selectCases *[]reflect.SelectCase) {
+	channels := *linker.GetIncomingRequestChannels()
+	for i, channel := range channels {
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
-	return requests
 }
 
 func startLinker(linker ILinker) {
 	for {
-		requests := linker.checkIncomingRequests()
-		linker.addPendingRequests(requests)
+		if linker.isPendingConnectionsEmpty() {
+			selectDevicesCases := make([]reflect.SelectCase, linker.GetNumberOfDevices())
+			linker.InitChannelCases(&selectDevicesCases)
+			_, value, _ := reflect.Select(selectDevicesCases)
+			request := value.Interface().(LinkRequest)
+			linker.addPendingRequest(request)
+		}
 		linker.processRequests()
 	}
 }

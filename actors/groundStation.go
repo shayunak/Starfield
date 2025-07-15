@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"log"
 	"math"
+	"reflect"
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
@@ -71,10 +72,15 @@ type IGroundStation interface {
 	ReceiveFromInterfaces()
 	SendPackets() float64
 	ProcessBuffers()
-	CheckProgressToken()
 	SendTimeStampAck(nextTimeStamp float64)
-	CheckIncomingConnection()
 	SendPendingRequests()
+	ProcessIncomingConnection(linkReq LinkRequest)
+	CheckIncomingConnections()
+	InitChannelCases(selectCases *[]reflect.SelectCase) []string
+	WatchEvents()
+	IsBlocking() bool
+	areAllBuffersEmpty() bool
+	getReceiveGSL() ([]*chan connections.Packet, []string)
 	generatePackets(fromId int, maxPacketSize float64, entry TrafficEntry) ([]connections.Packet, int)
 	logEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 	findConnection(toSatellite string) connections.INetworkInterface
@@ -192,6 +198,21 @@ func (gs *GroundStation) SetAckTokenChannel(channel *AckTokenChannel) {
 func (gs *GroundStation) SetLinkerChannels(ingoingChannel *LinkRequestChannel, outgoingChannel *LinkRequestChannel) {
 	gs.LinkerIncomingChannel = ingoingChannel
 	gs.LinkerOutgoingChannel = outgoingChannel
+}
+
+func (gs *GroundStation) areAllBuffersEmpty() bool {
+	for _, inface := range gs.GSLInterfaces {
+		if inface.HasSendChannel() && inface.IsBufferNotEmpty() {
+			return false
+		}
+	}
+	return true
+}
+
+func (gs *GroundStation) IsBlocking() bool {
+	return len(gs.PendingConnections) == 0 &&
+		gs.areAllBuffersEmpty() &&
+		(len(gs.EventQueue) == 0 || gs.TimeStamp <= gs.lastAckTimeStamp)
 }
 
 func (gs *GroundStation) Run() {
@@ -352,23 +373,31 @@ func (gs *GroundStation) SendPackets() float64 {
 				gs.logEvent(int(itemPopped.Value.TimeStamp), SIMULATION_EVENT_DELIVERED, itemPopped.Value.Data, packet.Source, packet.Destination)
 			}
 		}
+		nextEventTime = gs.TotalSimulationTime
 	}
 	return nextEventTime
 }
 
-func (gs *GroundStation) CheckIncomingConnection() {
-	select {
-	case linkReq := <-*gs.LinkerIncomingChannel:
-		inface, found := gs.GSLInterfaces[linkReq.FromDevice]
-		if found {
-			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
-		} else {
-			newInterface := gs.GSLInterfaceSample.Clone()
-			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
-			gs.GSLInterfaces[linkReq.FromDevice] = newInterface
+func (gs *GroundStation) CheckIncomingConnections() {
+	channelEmpty := false
+	for !channelEmpty {
+		select {
+		case linkReq := <-*gs.LinkerIncomingChannel:
+			gs.ProcessIncomingConnection(linkReq)
+		default:
+			channelEmpty = true
 		}
-	default:
-		return
+	}
+}
+
+func (gs *GroundStation) ProcessIncomingConnection(linkReq LinkRequest) {
+	inface, found := gs.GSLInterfaces[linkReq.FromDevice]
+	if found {
+		inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+	} else {
+		newInterface := gs.GSLInterfaceSample.Clone()
+		newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		gs.GSLInterfaces[linkReq.FromDevice] = newInterface
 	}
 }
 
@@ -394,19 +423,60 @@ func (gs *GroundStation) SendTimeStampAck(nextTimeStamp float64) {
 	}
 }
 
-func (gs *GroundStation) CheckProgressToken() {
-	select {
-	case token := <-*gs.ProgressTokenChannel:
+func (gs *GroundStation) getReceiveGSL() ([]*chan connections.Packet, []string) {
+	channels := make([]*chan connections.Packet, 0)
+	channelOwners := make([]string, 0)
+	for gsName, inface := range gs.GSLInterfaces {
+		if inface.GetDeviceConnectedTo() != "" {
+			if inface.HasReceiveChannel() {
+				channels = append(channels, inface.GetReceiveChannel())
+				channelOwners = append(channelOwners, gsName)
+			}
+		} else {
+			delete(gs.GSLInterfaces, gsName)
+		}
+	}
+	return channels, channelOwners
+}
+
+func (gs *GroundStation) InitChannelCases(selectCases *[]reflect.SelectCase) []string {
+	channels, channelOwners := gs.getReceiveGSL()
+	*selectCases = make([]reflect.SelectCase, len(channels)+2)
+	(*selectCases)[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*gs.ProgressTokenChannel)}
+	(*selectCases)[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*gs.LinkerIncomingChannel)}
+	for i, channel := range channels {
+		(*selectCases)[i+2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
+	return channelOwners
+}
+
+func (gs *GroundStation) WatchEvents() {
+	var selectIncomingChannelsCases []reflect.SelectCase
+	channelOwners := gs.InitChannelCases(&selectIncomingChannelsCases)
+	indx, value, _ := reflect.Select(selectIncomingChannelsCases)
+	switch indx {
+	case 0:
+		token := value.Interface().(ProgressToken)
 		gs.TimeStamp = max(gs.TimeStamp, token.TimeStamp)
+	case 1:
+		linkReq := value.Interface().(LinkRequest)
+		gs.ProcessIncomingConnection(linkReq)
 	default:
-		return
+		packet := value.Interface().(connections.Packet)
+		inface := gs.GSLInterfaces[channelOwners[indx-2]]
+		event := inface.ProcessReceivedPacket(&packet)
+		item := connections.Item{Value: &event, Rank: int(event.TimeStamp)}
+		heap.Push(&gs.EventQueue, &item)
+		gs.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), gs.Name)
 	}
 }
 
 func startGS(myGS IGroundStation) {
 	for {
-		myGS.CheckProgressToken()
-		myGS.CheckIncomingConnection()
+		if myGS.IsBlocking() {
+			myGS.WatchEvents()
+		}
+		myGS.CheckIncomingConnections()
 		myGS.ReceiveFromInterfaces()
 		myGS.SendPendingRequests()
 		nextTimeStamp := myGS.SendPackets()
