@@ -56,10 +56,15 @@ type ILogger interface {
 	Run(wg *sync.WaitGroup)
 	// General
 	GetTotalSimulationTime() float64
+	GetTimeStamp() float64
 }
 
 func (logger *Logger) GetTotalSimulationTime() float64 {
 	return logger.TotalSimulationTime
+}
+
+func (logger *Logger) GetTimeStamp() float64 {
+	return logger.TimeStamp
 }
 
 //////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////

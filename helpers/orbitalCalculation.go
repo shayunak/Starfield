@@ -35,6 +35,7 @@ type IOrbitalCalculations interface {
 	IsOrbitAngleValid(angle float64) bool
 	analyzeOrbitRange(orbitRange Range, inRangeOrbits *map[int]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements)
 	calculateLimits(lengthLimitRatio float64, anomalySinus float64) (float64, float64)
+	calculatePhi(anomalyEl AnomalyElements) float64
 	findRanges(LU float64, LD float64, Phi float64, ascensionFromMin float64) (Range, Range)
 }
 
@@ -83,6 +84,10 @@ func (orbitalCalc *OrbitalCalculations) calculateLimits(lengthLimitRatio float64
 	return LD, LU
 }
 
+func (orbitalCalc *OrbitalCalculations) calculatePhi(anomalyEl AnomalyElements) float64 {
+	return math.Atan2(orbitalCalc.InclinationCosinus*anomalyEl.AnomalySinus, anomalyEl.AnomalyCosinus)
+}
+
 func (orbitalCalc *OrbitalCalculations) calculateCosinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64 {
 	cosinalMultplication := anomalyEl.AnomalyCosinus * math.Cos(ascensionDiff)
 	sinalMultiplication := anomalyEl.AnomalySinus * math.Sin(ascensionDiff) * orbitalCalc.InclinationCosinus
@@ -96,26 +101,6 @@ func (orbitalCalc *OrbitalCalculations) calculateSinalCoefficient(anomalyEl Anom
 
 	return cosinalMultplication + sinalMultiplication
 }
-
-/*
-func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(Id string, lengthLimitRatio float64, currentAnomaly float64, anomalyEl AnomalyElements, orbitalAscension float64) map[int]OrbitCalc {
-	inRangeOrbits := make(map[int]OrbitCalc)
-
-	for i := range orbitalCalc.NumberOfOrbits {
-		orbitAscension := orbitalCalc.MinAscensionAngle + float64(i)*orbitalCalc.AscensionStep
-		ascensionDiff := orbitalAscension - orbitAscension
-		cosinalCoefficient := orbitalCalc.calculateCosinalCoefficient(anomalyEl, ascensionDiff)
-		sinalCoefficient := orbitalCalc.calculateSinalCoefficient(anomalyEl, ascensionDiff)
-		if lengthLimitRatio <= math.Sqrt(math.Pow(cosinalCoefficient, 2.0)+math.Pow(sinalCoefficient, 2.0)) {
-			inRangeOrbits[i] = OrbitCalc{
-				CosinalCoefficient: cosinalCoefficient,
-				SinalCoefficient:   sinalCoefficient,
-				AscensionDiff:      ascensionDiff,
-			}
-		}
-	}
-	return inRangeOrbits
-}*/
 
 func (orbitalCalc *OrbitalCalculations) analyzeOrbitRange(orbitRange Range, inRangeOrbits *map[int]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements) {
 	for i := orbitRange.Min; i <= orbitRange.Max; i++ {
@@ -171,7 +156,7 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float
 
 	ascensionFromMin := orbitalAscension - orbitalCalc.MinAscensionAngle
 	LD, LU := orbitalCalc.calculateLimits(lengthLimitRatio, anomalyEl.AnomalySinus)
-	Phi := math.Atan2(orbitalCalc.InclinationCosinus*anomalyEl.AnomalySinus, anomalyEl.AnomalyCosinus)
+	Phi := orbitalCalc.calculatePhi(anomalyEl)
 
 	firstRange, secondRange := orbitalCalc.findRanges(LU, LD, Phi, ascensionFromMin)
 
