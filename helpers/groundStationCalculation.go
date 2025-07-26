@@ -24,13 +24,16 @@ type GroundStationCalculation struct {
 }
 
 type IGroundStationCalculation interface {
+	GetAnomalyCalculations() IAnomalyCalculation
 	FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64)
 	FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]float64
 	UpdatePosition(prevAscension float64, timeStep float64) float64
 	SetGroundStationSpecs(gsSpecs *GroundStationSpecs)
 	GetCoveringGroundStations(timeStamp float64, anomaly float64, orbit IOrbit) map[string]float64
-	GetAnomalyCalculations() IAnomalyCalculation
+	coveringGroundStation(headPointAscension float64, headPointAnomalyEl AnomalyElements, anomaly float64, timeStamp float64,
+		earthRotationMotion float64, earthOrbitRatio float64, ascension float64, altitude float64, distances *[]float64, gsInRange *[]string, gsName string)
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
+	update_distance_with_altitude(i int, distances []float64, altitude float64, earthOrbitRatio float64)
 }
 
 func (gsc *GroundStationCalculation) SetGroundStationSpecs(gsSpecs *GroundStationSpecs) {
@@ -41,6 +44,7 @@ func (gsc *GroundStationCalculation) GetAnomalyCalculations() IAnomalyCalculatio
 	return gsc.AnomalyCalculations
 }
 
+// Cuda Compatible
 func (gsc *GroundStationCalculation) adjustAngles(anomaly float64, deltaLongitude float64,
 	adjustedLongitude float64) (float64, float64) {
 	positiveAscension := adjustedLongitude + deltaLongitude
@@ -57,6 +61,7 @@ func (gsc *GroundStationCalculation) UpdatePosition(prevAscension float64, timeS
 	return prevAscension + gsc.EarthRotaionMotion*timeStep
 }
 
+// cuda Compatible
 func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64) {
 	inclinationSinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationSinus()
 	inclinationCosinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationCosinus()
@@ -76,21 +81,27 @@ func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName s
 	return gsc.adjustAngles(anomaly, deltaLongitude, adjustedLongitude)
 }
 
+// Cuda Compatible
+func (gsc *GroundStationCalculation) update_distance_with_altitude(i int, distances []float64, altitude float64, earthOrbitRatio float64) {
+	distances[i] = math.Sqrt(math.Pow(altitude, 2.0) + earthOrbitRatio*math.Pow(distances[i], 2.0))
+}
+
 func (gsc *GroundStationCalculation) FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements,
 	timeStamp float64) map[string]float64 {
 
 	satelliteDistances := gsc.AnomalyCalculations.FindSatellitesInRange(Id, gsc.ElevationLimitRatio,
 		headPointAnomalyEl, headPointAscension, timeStamp)
 
-	for id, distance := range satelliteDistances {
-		updatedDistance := math.Sqrt(math.Pow(gsc.Altitude, 2.0) + gsc.EarthOrbitRatio*math.Pow(distance, 2.0))
-		newDistanceObject := updatedDistance
-		satelliteDistances[id] = newDistanceObject
+	satelliteIds, distances := unzip_satellite_ids_with_distances(satelliteDistances)
+
+	for i := range distances {
+		gsc.update_distance_with_altitude(i, distances, gsc.Altitude, gsc.EarthOrbitRatio)
 	}
 
-	return satelliteDistances
+	return zip_satellite_ids_with_distances(satelliteIds, distances)
 }
 
+// Cuda Compatible
 func (gsc *GroundStationCalculation) calculateGSDistance(headPointAnomalyEl AnomalyElements, headPointAscension float64, anomaly float64, ascension float64) float64 {
 	orbitalCalculations := gsc.AnomalyCalculations.GetOrbitalCalculations()
 	ascensionDiff := headPointAscension - ascension
@@ -104,18 +115,46 @@ func (gsc *GroundStationCalculation) calculateGSDistance(headPointAnomalyEl Anom
 	return gsc.AnomalyCalculations.CalculateDistance(orbitalCalc, anomaly)
 }
 
+// Cuda Compatible
+func (gsc *GroundStationCalculation) coveringGroundStation(headPointAscension float64, headPointAnomalyEl AnomalyElements,
+	anomaly float64, timeStamp float64, earthRotationMotion float64, earthOrbitRatio float64, ascension float64,
+	altitude float64, distances *[]float64, gsInRange *[]string, gsName string) {
+	gsAscension := headPointAscension + earthRotationMotion*timeStamp
+	distance := gsc.calculateGSDistance(headPointAnomalyEl, gsAscension, anomaly, ascension)
+
+	if distance < gsc.GroundStationsDistanceLimit {
+		updatedDistance := math.Sqrt(math.Pow(altitude, 2.0) + earthOrbitRatio*math.Pow(distance, 2.0))
+		*distances = append(*distances, updatedDistance)
+		*gsInRange = append(*gsInRange, gsName)
+	}
+}
+
 func (gsc *GroundStationCalculation) GetCoveringGroundStations(timeStamp float64, anomaly float64, orbit IOrbit) map[string]float64 {
-	distances := make(map[string]float64)
+	var distances []float64
+	var gsInRange []string
 	earthOrbitRatio := 1.0 - orbit.GetAltitude()/orbit.GetRadius()
 
 	for gsName, gsSpec := range *gsc.GroundStations {
-		gsAscension := gsSpec.HeadPointAscension + orbit.GetEarthRotaionMotion()*timeStamp
-		distance := gsc.calculateGSDistance(gsSpec.HeadPointAnomalyEl, gsAscension, anomaly, orbit.GetAscension())
-
-		if distance < gsc.GroundStationsDistanceLimit {
-			updatedDistance := math.Sqrt(math.Pow(orbit.GetAltitude(), 2.0) + earthOrbitRatio*math.Pow(distance, 2.0))
-			distances[gsName] = updatedDistance
-		}
+		gsc.coveringGroundStation(gsSpec.HeadPointAscension, gsSpec.HeadPointAnomalyEl, anomaly, timeStamp,
+			gsc.EarthRotaionMotion, earthOrbitRatio, orbit.GetAscension(), orbit.GetAltitude(), &distances, &gsInRange, gsName)
 	}
-	return distances
+	return zip_gs_ids_with_distances(gsInRange, distances)
+}
+
+func zip_gs_ids_with_distances(gsIds []string, distances []float64) map[string]float64 {
+	distancesMap := make(map[string]float64)
+	for i, id := range gsIds {
+		distancesMap[id] = distances[i]
+	}
+	return distancesMap
+}
+
+func unzip_satellite_ids_with_distances(distances map[string]float64) ([]string, []float64) {
+	var satelliteIds []string
+	var satelliteDistances []float64
+	for id, distance := range distances {
+		satelliteIds = append(satelliteIds, id)
+		satelliteDistances = append(satelliteDistances, distance)
+	}
+	return satelliteIds, satelliteDistances
 }

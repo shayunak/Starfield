@@ -25,7 +25,8 @@ type IAnomalyCalculation interface {
 	GetOrbitalCalculations() IOrbitalCalculations
 	GetLengthLimitRatio() float64
 	GetMaxDistance() float64
-	calculateSatelliteIdInRange(lengthLimitRatio float64, orbitCalc OrbitCalc, timeStamp float64, orbit int) map[int]float64
+	findDistanceforSatelliteId(i int, baseId string, orbit int, timeStamp float64, orbitCalc OrbitCalc, initialPhaseShift float64, satelliteIds *[]string, satelliteDistances *[]float64)
+	calculateSatelliteIdInRange(orbit int, orbitCalc OrbitCalc, baseId string, lengthLimitRatio float64, timeStamp float64, satelliteIds *[]string, satelliteDistances *[]float64)
 	CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64
 	calculatePhase(satelliteId int, orbitId int) float64
 }
@@ -42,6 +43,7 @@ type AnomalyCalculations struct {
 	PhaseDiffEnabled           bool
 }
 
+// Cuda Compatible
 func (anomalyCalc *AnomalyCalculations) CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64 {
 	distance_squared_factor := 2 * (orbitCalc.CosinalCoefficient*math.Cos(otherSatelliteAnomaly) -
 		orbitCalc.SinalCoefficient*math.Sin(otherSatelliteAnomaly) + 1.0)
@@ -53,9 +55,20 @@ func (anomalyCalc *AnomalyCalculations) CalculateDistance(orbitCalc OrbitCalc, o
 	return anomalyCalc.Radius * math.Sqrt(distance_squared_factor)
 }
 
-func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(lengthLimitRatio float64, orbitCalc OrbitCalc,
-	timeStamp float64, orbit int) map[int]float64 {
-	satellites := make(map[int]float64)
+func (anomalyCalc *AnomalyCalculations) findDistanceforSatelliteId(i int, baseId string, orbit int, timeStamp float64, orbitCalc OrbitCalc,
+	initialPhaseShift float64, satelliteIds *[]string, satelliteDistances *[]float64) {
+	realAnomaly := float64(i)*anomalyCalc.AnomalyStep + initialPhaseShift + timeStamp*anomalyCalc.MeanMotion
+	realId := (i + anomalyCalc.NumberOfSatellitesPerOrbit) % anomalyCalc.NumberOfSatellitesPerOrbit
+	satelliteId := fmt.Sprintf("%s-%d-%d", anomalyCalc.ConsellationName, orbit, realId)
+	if baseId != satelliteId {
+		*satelliteIds = append(*satelliteIds, satelliteId)
+		*satelliteDistances = append(*satelliteDistances, anomalyCalc.CalculateDistance(orbitCalc, realAnomaly))
+	}
+}
+
+// Cuda Compatible
+func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbit int, orbitCalc OrbitCalc, baseId string,
+	lengthLimitRatio float64, timeStamp float64, satelliteIds *[]string, satelliteDistances *[]float64) {
 	orbitalCalcSize := math.Sqrt(math.Pow(orbitCalc.CosinalCoefficient, 2.0) + math.Pow(orbitCalc.SinalCoefficient, 2.0))
 	limitTerm := math.Asin(lengthLimitRatio / orbitalCalcSize)
 	phaseTerm := math.Atan2(orbitCalc.CosinalCoefficient, orbitCalc.SinalCoefficient)
@@ -67,35 +80,28 @@ func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(lengthLimitR
 	if anomalyCalc.PhaseDiffEnabled && orbit%2 == 1 {
 		initialPhaseShift = anomalyCalc.AnomalyStep / 2.0
 	}
+
 	lowerId := int(math.Ceil((lowerRange - initialPhaseShift - timeStamp*anomalyCalc.MeanMotion) / anomalyCalc.AnomalyStep))
 	upperId := int(math.Floor((upperRange - initialPhaseShift - timeStamp*anomalyCalc.MeanMotion) / anomalyCalc.AnomalyStep))
 
 	for i := lowerId; i <= upperId; i++ {
-		realAnomaly := float64(i)*anomalyCalc.AnomalyStep + initialPhaseShift + timeStamp*anomalyCalc.MeanMotion
-		realId := (i + anomalyCalc.NumberOfSatellitesPerOrbit) % anomalyCalc.NumberOfSatellitesPerOrbit
-		satellites[realId] = anomalyCalc.CalculateDistance(orbitCalc, realAnomaly)
+		anomalyCalc.findDistanceforSatelliteId(i, baseId, orbit, timeStamp, orbitCalc, initialPhaseShift, satelliteIds, satelliteDistances)
 	}
-
-	return satellites
 }
 
 func (anomalyCalc *AnomalyCalculations) FindSatellitesInRange(Id string, lengthLimitRatio float64, anomalyEl AnomalyElements,
 	orbitalAscension float64, timeStamp float64) map[string]float64 {
 
-	satellitesDistances := make(map[string]float64)
+	var satelliteDistances []float64
+	var satelliteIds []string
 	orbitsInRange := anomalyCalc.OrbitalCalculations.FindOrbitsInRange(lengthLimitRatio, anomalyEl, orbitalAscension)
 	for orbit, orbitCalc := range orbitsInRange {
-		satellites := anomalyCalc.calculateSatelliteIdInRange(lengthLimitRatio, orbitCalc, timeStamp, orbit)
-		for id, distance := range satellites {
-			sat_name := fmt.Sprintf("%s-%d-%d", anomalyCalc.ConsellationName, orbit, id)
-			if Id != sat_name {
-				satellitesDistances[sat_name] = distance
-			}
-		}
+		anomalyCalc.calculateSatelliteIdInRange(orbit, orbitCalc, Id, lengthLimitRatio, timeStamp, &satelliteIds, &satelliteDistances)
 	}
-	return satellitesDistances
+	return zip_satellite_ids_with_distances(satelliteIds, satelliteDistances)
 }
 
+// Cuda Compatible
 func (anomalyCalc *AnomalyCalculations) UpdatePosition(prevAnomaly float64, timeStep float64) (float64, AnomalyElements) {
 	newOrbitalAnomaly := prevAnomaly + anomalyCalc.MeanMotion*timeStep
 	newAnomalyElements := AnomalyElements{
@@ -105,8 +111,8 @@ func (anomalyCalc *AnomalyCalculations) UpdatePosition(prevAnomaly float64, time
 	return newOrbitalAnomaly, newAnomalyElements
 }
 
+// Cuda Compatible
 func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId int) float64 {
-
 	phase := float64(satelliteId) * anomalyCalc.AnomalyStep
 	if anomalyCalc.PhaseDiffEnabled && orbitId%2 == 1 {
 		phase += anomalyCalc.AnomalyStep / 2.0
@@ -115,7 +121,8 @@ func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId 
 	return phase
 }
 
-// Timestamp shpuld be in seconds
+// Cuda Compatible
+// Timestamp should be in seconds
 func (anomalyCalc *AnomalyCalculations) CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int,
 	secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64 {
 
@@ -148,4 +155,12 @@ func (anomalyCalc *AnomalyCalculations) GetLengthLimitRatio() float64 {
 
 func (anomalyCalc *AnomalyCalculations) GetMaxDistance() float64 {
 	return anomalyCalc.MaxDistance
+}
+
+func zip_satellite_ids_with_distances(inRangeIds []string, distances []float64) map[string]float64 {
+	distancesMap := make(map[string]float64)
+	for i, id := range inRangeIds {
+		distancesMap[id] = distances[i]
+	}
+	return distancesMap
 }
