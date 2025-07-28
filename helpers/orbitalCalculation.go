@@ -28,11 +28,11 @@ type IOrbitalCalculations interface {
 	GetInclinationSinus() float64
 	GetInclinationCosinus() float64
 	GetAscensionStep() float64
-	FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64) map[int]OrbitCalc
+	FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc)
 	calculateCosinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
 	calculateSinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
-	ConvertOrbitIdToAscension(orbitId int) float64
-	IsOrbitAngleValid(angle float64) bool
+	convertOrbitIdToAscension(orbitId int) float64
+	isOrbitAngleValid(angle float64) bool
 	analyzeOrbit(i int, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements)
 	analyzeOrbitRange(orbitRange Range, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements)
 	calculateLimits(lengthLimitRatio float64, anomalySinus float64) (float64, float64)
@@ -53,12 +53,12 @@ func (orbitalCalc *OrbitalCalculations) GetAscensionStep() float64 {
 }
 
 // Cuda Compatible
-func (orbitalCalc *OrbitalCalculations) IsOrbitAngleValid(angle float64) bool {
+func (orbitalCalc *OrbitalCalculations) isOrbitAngleValid(angle float64) bool {
 	return angle >= orbitalCalc.MinAscensionAngle && angle <= orbitalCalc.MaxAscensionAngle
 }
 
 // Cuda Compatible
-func (orbitalCalc *OrbitalCalculations) ConvertOrbitIdToAscension(orbitId int) float64 {
+func (orbitalCalc *OrbitalCalculations) convertOrbitIdToAscension(orbitId int) float64 {
 	return float64(orbitId)*orbitalCalc.AscensionStep + orbitalCalc.MinAscensionAngle
 }
 
@@ -112,7 +112,7 @@ func (orbitalCalc *OrbitalCalculations) calculateSinalCoefficient(anomalyEl Anom
 // Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) analyzeOrbit(i int, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements) {
 	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(i)+orbitalCalc.MinAscensionAngle+2*math.Pi, 2*math.Pi)
-	if orbitalCalc.IsOrbitAngleValid(ascensionCalculated) {
+	if orbitalCalc.isOrbitAngleValid(ascensionCalculated) {
 		ascensionDiff := orbitalAscension - ascensionCalculated
 		realId := int(math.Round((ascensionCalculated - orbitalCalc.MinAscensionAngle) / orbitalCalc.AscensionStep))
 		*inRangeIds = append(*inRangeIds, realId)
@@ -166,9 +166,9 @@ func (orbitalCalc *OrbitalCalculations) findRanges(LU float64, LD float64, Phi f
 	return firstRange, secondRange
 }
 
-func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64) map[int]OrbitCalc {
-	var inRangeIds []int
-	var inRangeOrbits []OrbitCalc
+// Cuda Compatible
+func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements,
+	orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc) {
 
 	ascensionFromMin := orbitalAscension - orbitalCalc.MinAscensionAngle
 	LD, LU := orbitalCalc.calculateLimits(lengthLimitRatio, anomalyEl.AnomalySinus)
@@ -178,21 +178,11 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float
 
 	// Calculate First Range
 	if firstRange.Min != 0 || firstRange.Max != -1 {
-		orbitalCalc.analyzeOrbitRange(firstRange, &inRangeIds, &inRangeOrbits, orbitalAscension, anomalyEl)
+		orbitalCalc.analyzeOrbitRange(firstRange, inRangeIds, inRangeOrbits, orbitalAscension, anomalyEl)
 	}
 
 	// Calculate Second Range
 	if secondRange.Min != 0 || secondRange.Max != -1 {
-		orbitalCalc.analyzeOrbitRange(secondRange, &inRangeIds, &inRangeOrbits, orbitalAscension, anomalyEl)
+		orbitalCalc.analyzeOrbitRange(secondRange, inRangeIds, inRangeOrbits, orbitalAscension, anomalyEl)
 	}
-
-	return zip_orbit_ids_with_orbit_calculations(inRangeIds, inRangeOrbits)
-}
-
-func zip_orbit_ids_with_orbit_calculations(inRangeIds []int, inRangeOrbits []OrbitCalc) map[int]OrbitCalc {
-	inRangeOrbitsMap := make(map[int]OrbitCalc)
-	for i, id := range inRangeIds {
-		inRangeOrbitsMap[id] = inRangeOrbits[i]
-	}
-	return inRangeOrbitsMap
 }

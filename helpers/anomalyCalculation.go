@@ -10,14 +10,6 @@ type AnomalyElements struct {
 	AnomalyCosinus float64
 }
 
-/*type DistanceObject struct {
-	Distance      float64
-	Anomaly       float64
-	AscensionDiff string
-	A             float64
-	B             float64
-}*/
-
 type IAnomalyCalculation interface {
 	FindSatellitesInRange(Id string, lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, timeStamp float64) map[string]float64
 	UpdatePosition(prevAnomaly float64, timeStep float64) (float64, AnomalyElements)
@@ -91,12 +83,13 @@ func (anomalyCalc *AnomalyCalculations) calculateSatelliteIdInRange(orbit int, o
 
 func (anomalyCalc *AnomalyCalculations) FindSatellitesInRange(Id string, lengthLimitRatio float64, anomalyEl AnomalyElements,
 	orbitalAscension float64, timeStamp float64) map[string]float64 {
-
 	var satelliteDistances []float64
 	var satelliteIds []string
-	orbitsInRange := anomalyCalc.OrbitalCalculations.FindOrbitsInRange(lengthLimitRatio, anomalyEl, orbitalAscension)
-	for orbit, orbitCalc := range orbitsInRange {
-		anomalyCalc.calculateSatelliteIdInRange(orbit, orbitCalc, Id, lengthLimitRatio, timeStamp, &satelliteIds, &satelliteDistances)
+	inRangeIds := make([]int, 0)
+	inRangeOrbits := make([]OrbitCalc, 0)
+	anomalyCalc.OrbitalCalculations.FindOrbitsInRange(lengthLimitRatio, anomalyEl, orbitalAscension, &inRangeIds, &inRangeOrbits)
+	for i := 0; i < len(inRangeIds); i++ {
+		anomalyCalc.calculateSatelliteIdInRange(inRangeIds[i], inRangeOrbits[i], Id, lengthLimitRatio, timeStamp, &satelliteIds, &satelliteDistances)
 	}
 	return zip_satellite_ids_with_distances(satelliteIds, satelliteDistances)
 }
