@@ -38,6 +38,7 @@ type SatelliteConfig struct {
 
 type Config struct {
 	ConsellationName string          `json:"name"`
+	UseGPU           bool            `json:"use_gpu"` // if true, the simulator will use GPU for calculations
 	OrbitConfig      OrbitConfig     `json:"orbit_config"`
 	SatelliteConfig  SatelliteConfig `json:"satellite_config"`
 }

@@ -1,5 +1,6 @@
 {
     "name": "Starlink",
+    "use_gpu": true,
     "orbit_config": {
         "earth_radius": 6378135.0,
         "earth_rotation_period": 1.0,
@@ -7,8 +8,8 @@
         "min_altitude_isl": 80000.0,
         "inclination": 53,
         "min_ascension_angle": 0.0,
-        "max_ascension_angle": 355.0,
-        "number_of_orbits": 72,
+        "max_ascension_angle": 10.0,
+        "number_of_orbits": 3,
         "number_of_satellites_per_orbit": 22,
         "phase_diff_enabled": true
     },

@@ -35,6 +35,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 		NumberOfOrbits:     numberOfOrbits,
 		MinAscensionAngle:  minAscensionAngle * math.Pi / 180.0,
 		MaxAscensionAngle:  maxAscensionAngle * math.Pi / 180.0,
+		UseGPU:             config.UseGPU,
 	}
 
 	anomalyCalc := &helpers.AnomalyCalculations{
@@ -47,6 +48,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 		Radius:                     orbitRadius,
 		OrbitalCalculations:        orbitalCalc,
 		PhaseDiffEnabled:           config.OrbitConfig.PhaseDiffEnabled,
+		UseGPU:                     config.UseGPU,
 	}
 
 	groundCalc := &helpers.GroundStationCalculation{
@@ -58,6 +60,8 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 		EarthRotaionMotion:          earthMotionRadiansPerSecond,
 		GroundStationsDistanceLimit: calculateGroundStationDistancLimit(orbitRadius, config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
 		GroundStations:              nil,
+		GroundStationCalculationC:   nil,
+		UseGPU:                      config.UseGPU,
 	}
 
 	return anomalyCalc, groundCalc

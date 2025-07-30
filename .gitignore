@@ -31,3 +31,6 @@ generated/*
 forwarding_table/*
 results/*
 satsim
+
+#vscode
+.vscode/

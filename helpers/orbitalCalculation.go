@@ -1,7 +1,16 @@
 package helpers
 
+/*
+#cgo CFLAGS: -std=c99 -I.
+#cgo LDFLAGS: -lm
+#include "orbital_calculation.h"
+#include <stdlib.h>
+*/
+import "C"
+
 import (
 	"math"
+	"unsafe"
 )
 
 type OrbitalCalculations struct {
@@ -11,6 +20,7 @@ type OrbitalCalculations struct {
 	AscensionStep      float64 // in radians
 	MinAscensionAngle  float64 // in radians
 	MaxAscensionAngle  float64 // in radians
+	UseGPU             bool
 }
 
 type OrbitCalc struct {
@@ -28,7 +38,11 @@ type IOrbitalCalculations interface {
 	GetInclinationSinus() float64
 	GetInclinationCosinus() float64
 	GetAscensionStep() float64
+	GetMinAscensionAngle() float64
+	GetMaxAscensionAngle() float64
+	GetNumberOfOrbits() int
 	FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc)
+	findOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc)
 	calculateCosinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
 	calculateSinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
 	convertOrbitIdToAscension(orbitId int) float64
@@ -52,17 +66,26 @@ func (orbitalCalc *OrbitalCalculations) GetAscensionStep() float64 {
 	return orbitalCalc.AscensionStep
 }
 
-// Cuda Compatible
+func (orbitalCalc *OrbitalCalculations) GetMinAscensionAngle() float64 {
+	return orbitalCalc.MinAscensionAngle
+}
+
+func (orbitalCalc *OrbitalCalculations) GetMaxAscensionAngle() float64 {
+	return orbitalCalc.MaxAscensionAngle
+}
+
+func (orbitalCalc *OrbitalCalculations) GetNumberOfOrbits() int {
+	return orbitalCalc.NumberOfOrbits
+}
+
 func (orbitalCalc *OrbitalCalculations) isOrbitAngleValid(angle float64) bool {
 	return angle >= orbitalCalc.MinAscensionAngle && angle <= orbitalCalc.MaxAscensionAngle
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) convertOrbitIdToAscension(orbitId int) float64 {
 	return float64(orbitId)*orbitalCalc.AscensionStep + orbitalCalc.MinAscensionAngle
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) calculateLimits(lengthLimitRatio float64, anomalySinus float64) (float64, float64) {
 
 	ISLLengthLimit := math.Sqrt(1 - math.Pow(lengthLimitRatio, 2.0))
@@ -88,12 +111,10 @@ func (orbitalCalc *OrbitalCalculations) calculateLimits(lengthLimitRatio float64
 	return LD, LU
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) calculatePhi(anomalyEl AnomalyElements) float64 {
 	return math.Atan2(orbitalCalc.InclinationCosinus*anomalyEl.AnomalySinus, anomalyEl.AnomalyCosinus)
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) calculateCosinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64 {
 	cosinalMultplication := anomalyEl.AnomalyCosinus * math.Cos(ascensionDiff)
 	sinalMultiplication := anomalyEl.AnomalySinus * math.Sin(ascensionDiff) * orbitalCalc.InclinationCosinus
@@ -101,7 +122,6 @@ func (orbitalCalc *OrbitalCalculations) calculateCosinalCoefficient(anomalyEl An
 	return sinalMultiplication - cosinalMultplication
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) calculateSinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64 {
 	cosinalMultplication := anomalyEl.AnomalyCosinus * math.Sin(ascensionDiff) * orbitalCalc.InclinationCosinus
 	sinalMultiplication := anomalyEl.AnomalySinus * (math.Pow(orbitalCalc.InclinationCosinus, 2)*math.Cos(ascensionDiff) + math.Pow(orbitalCalc.InclinationSinus, 2))
@@ -109,7 +129,6 @@ func (orbitalCalc *OrbitalCalculations) calculateSinalCoefficient(anomalyEl Anom
 	return cosinalMultplication + sinalMultiplication
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) analyzeOrbit(i int, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements) {
 	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(i)+orbitalCalc.MinAscensionAngle+2*math.Pi, 2*math.Pi)
 	if orbitalCalc.isOrbitAngleValid(ascensionCalculated) {
@@ -124,14 +143,12 @@ func (orbitalCalc *OrbitalCalculations) analyzeOrbit(i int, inRangeIds *[]int, i
 	}
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) analyzeOrbitRange(orbitRange Range, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements) {
 	for i := orbitRange.Min; i <= orbitRange.Max; i++ {
 		orbitalCalc.analyzeOrbit(i, inRangeIds, inRangeOrbits, orbitalAscension, anomalyEl)
 	}
 }
 
-// Cuda Compatible
 func (orbitalCalc *OrbitalCalculations) findRanges(LU float64, LD float64, Phi float64, ascensionFromMin float64) (Range, Range) {
 	var firstRange Range
 	var secondRange Range
@@ -166,8 +183,7 @@ func (orbitalCalc *OrbitalCalculations) findRanges(LU float64, LD float64, Phi f
 	return firstRange, secondRange
 }
 
-// Cuda Compatible
-func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements,
+func (orbitalCalc *OrbitalCalculations) findOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements,
 	orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc) {
 
 	ascensionFromMin := orbitalAscension - orbitalCalc.MinAscensionAngle
@@ -184,5 +200,49 @@ func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float
 	// Calculate Second Range
 	if secondRange.Min != 0 || secondRange.Max != -1 {
 		orbitalCalc.analyzeOrbitRange(secondRange, inRangeIds, inRangeOrbits, orbitalAscension, anomalyEl)
+	}
+}
+
+func (orbitalCalc *OrbitalCalculations) FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements,
+	orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc) {
+
+	if orbitalCalc.UseGPU {
+		var count C.int
+		inRangeIdsC := (*C.int)(C.malloc(C.size_t(orbitalCalc.NumberOfOrbits) * C.size_t(unsafe.Sizeof(C.int(0)))))
+		defer C.free(unsafe.Pointer(inRangeIdsC))
+		inRangeOrbitsC := (*C.orbit_calc)(C.malloc(C.size_t(orbitalCalc.NumberOfOrbits) * C.size_t(unsafe.Sizeof(C.orbit_calc{}))))
+		defer C.free(unsafe.Pointer(inRangeOrbitsC))
+		anomalyElC := C.anomaly_elements{
+			anomaly_sinus:   C.double(anomalyEl.AnomalySinus),
+			anomaly_cosinus: C.double(anomalyEl.AnomalyCosinus),
+		}
+		calc := C.orbital_calculations{
+			inclination_sinus:   C.double(orbitalCalc.InclinationSinus),
+			inclination_cosinus: C.double(orbitalCalc.InclinationCosinus),
+			ascension_step:      C.double(orbitalCalc.AscensionStep),
+			min_ascension_angle: C.double(orbitalCalc.MinAscensionAngle),
+			max_ascension_angle: C.double(orbitalCalc.MaxAscensionAngle),
+			number_of_orbits:    C.int(orbitalCalc.NumberOfOrbits),
+		}
+		C.find_orbits_in_range(
+			calc,
+			C.double(lengthLimitRatio),
+			anomalyElC,
+			C.double(orbitalAscension),
+			(*C.int)(unsafe.Pointer(inRangeIdsC)),
+			(*C.orbit_calc)(unsafe.Pointer(inRangeOrbitsC)),
+			&count,
+		)
+
+		for i := 0; i < int(count); i++ {
+			*inRangeIds = append(*inRangeIds, int(((*[1 << 30]C.int)(unsafe.Pointer(inRangeIdsC)))[i]))
+			*inRangeOrbits = append(*inRangeOrbits, OrbitCalc{
+				CosinalCoefficient: float64(((*[1 << 30]C.orbit_calc)(unsafe.Pointer(inRangeOrbitsC)))[i].cosinal_coefficient),
+				SinalCoefficient:   float64(((*[1 << 30]C.orbit_calc)(unsafe.Pointer(inRangeOrbitsC)))[i].sinal_coefficient),
+				AscensionDiff:      float64(((*[1 << 30]C.orbit_calc)(unsafe.Pointer(inRangeOrbitsC)))[i].ascension_diff),
+			})
+		}
+	} else {
+		orbitalCalc.findOrbitsInRange(lengthLimitRatio, anomalyEl, orbitalAscension, inRangeIds, inRangeOrbits)
 	}
 }

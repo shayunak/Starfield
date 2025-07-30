@@ -1,7 +1,17 @@
 package helpers
 
+/*
+#cgo CFLAGS: -std=c99 -I.
+#cgo LDFLAGS: -lm
+#include "anomaly_calculation.h"
+#include "ground_station_calculation.h"
+#include <stdlib.h>
+*/
+import "C"
+
 import (
 	"math"
+	"unsafe"
 )
 
 type GroundStationSpec struct {
@@ -19,8 +29,10 @@ type GroundStationCalculation struct {
 	Altitude                    float64
 	EarthOrbitRatio             float64
 	EarthRotaionMotion          float64
-	GroundStations              *GroundStationSpecs // groundStations
+	GroundStations              *GroundStationSpecs
+	GroundStationCalculationC   *C.ground_station_calculation
 	GroundStationsDistanceLimit float64
+	UseGPU                      bool
 }
 
 type IGroundStationCalculation interface {
@@ -33,18 +45,50 @@ type IGroundStationCalculation interface {
 	coveringGroundStation(headPointAscension float64, headPointAnomalyEl AnomalyElements, anomaly float64, timeStamp float64,
 		earthRotationMotion float64, earthOrbitRatio float64, ascension float64, altitude float64, distances *[]float64, gsInRange *[]string, gsName string)
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
-	update_distance_with_altitude(i int, distances []float64, altitude float64, earthOrbitRatio float64)
+	updateDistanceWithAltitude(i int, distances []float64, altitude float64, earthOrbitRatio float64)
 }
 
 func (gsc *GroundStationCalculation) SetGroundStationSpecs(gsSpecs *GroundStationSpecs) {
 	gsc.GroundStations = gsSpecs
+	gsc.initGroundStationCalcC()
 }
 
 func (gsc *GroundStationCalculation) GetAnomalyCalculations() IAnomalyCalculation {
 	return gsc.AnomalyCalculations
 }
 
-// Cuda Compatible
+func (gsc *GroundStationCalculation) initGroundStationCalcC() {
+	groundCalcC := C.ground_station_calculation{
+		elevation_limit_ratio:          C.double(gsc.ElevationLimitRatio),
+		altitude:                       C.double(gsc.Altitude),
+		earth_orbit_ratio:              C.double(gsc.EarthOrbitRatio),
+		earth_rotation_motion:          C.double(gsc.EarthRotaionMotion),
+		ground_stations_distance_limit: C.double(gsc.GroundStationsDistanceLimit),
+		radius:                         C.double(gsc.AnomalyCalculations.GetRadius()),
+		inclination_cosinus:            C.double(gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationCosinus()),
+		inclination_sinus:              C.double(gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationSinus()),
+		station_count:                  C.int(len(*gsc.GroundStations)),
+	}
+	i := 0
+	for name, gsSpec := range *gsc.GroundStations {
+		groundStationSpecC := C.ground_station_spec{
+			latitude:             C.double(gsSpec.Latitude),
+			longitude:            C.double(gsSpec.Longitude),
+			head_point_ascension: C.double(gsSpec.HeadPointAscension),
+			head_point_anomaly_el: C.anomaly_elements{
+				anomaly_sinus:   C.double(gsSpec.HeadPointAnomalyEl.AnomalySinus),
+				anomaly_cosinus: C.double(gsSpec.HeadPointAnomalyEl.AnomalyCosinus),
+			},
+		}
+		groundCalcC.station_specs[i] = groundStationSpecC
+		dest := (*[C.MAX_ID_LENGTH]byte)(unsafe.Pointer(&groundCalcC.station_names[i][0]))
+		copy(dest[:], name)
+		dest[len(name)] = 0
+		i++
+	}
+	gsc.GroundStationCalculationC = &groundCalcC
+}
+
 func (gsc *GroundStationCalculation) adjustAngles(anomaly float64, deltaLongitude float64,
 	adjustedLongitude float64) (float64, float64) {
 	positiveAscension := adjustedLongitude + deltaLongitude
@@ -58,10 +102,13 @@ func (gsc *GroundStationCalculation) adjustAngles(anomaly float64, deltaLongitud
 }
 
 func (gsc *GroundStationCalculation) UpdatePosition(prevAscension float64, timeStep float64) float64 {
-	return prevAscension + gsc.EarthRotaionMotion*timeStep
+	if gsc.UseGPU {
+		return float64(C.update_gs_position(C.double(prevAscension), C.double(timeStep), C.double(gsc.EarthRotaionMotion)))
+	} else {
+		return prevAscension + gsc.EarthRotaionMotion*timeStep
+	}
 }
 
-// cuda Compatible
 func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64) {
 	inclinationSinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationSinus()
 	inclinationCosinus := gsc.AnomalyCalculations.GetOrbitalCalculations().GetInclinationCosinus()
@@ -81,8 +128,7 @@ func (gsc *GroundStationCalculation) FindCoordinatesOfTheAboveHeadPoint(gsName s
 	return gsc.adjustAngles(anomaly, deltaLongitude, adjustedLongitude)
 }
 
-// Cuda Compatible
-func (gsc *GroundStationCalculation) update_distance_with_altitude(i int, distances []float64, altitude float64, earthOrbitRatio float64) {
+func (gsc *GroundStationCalculation) updateDistanceWithAltitude(i int, distances []float64, altitude float64, earthOrbitRatio float64) {
 	distances[i] = math.Sqrt(math.Pow(altitude, 2.0) + earthOrbitRatio*math.Pow(distances[i], 2.0))
 }
 
@@ -94,14 +140,28 @@ func (gsc *GroundStationCalculation) FindSatellitesInRange(Id string, headPointA
 
 	satelliteIds, distances := unzip_satellite_ids_with_distances(satelliteDistances)
 
-	for i := range distances {
-		gsc.update_distance_with_altitude(i, distances, gsc.Altitude, gsc.EarthOrbitRatio)
+	if gsc.UseGPU && len(distances) > 0 {
+		distancesC := make([]C.double, len(distances))
+		for i, distance := range distances {
+			distancesC[i] = C.double(distance)
+		}
+		C.update_distances_with_altitude((*C.double)(unsafe.Pointer(&distancesC[0])),
+			C.int(len(distancesC)),
+			C.double(gsc.Altitude),
+			C.double(gsc.EarthOrbitRatio),
+		)
+		for i := range distances {
+			distances[i] = float64(distancesC[i])
+		}
+	} else {
+		for i := range distances {
+			gsc.updateDistanceWithAltitude(i, distances, gsc.Altitude, gsc.EarthOrbitRatio)
+		}
 	}
 
 	return zip_satellite_ids_with_distances(satelliteIds, distances)
 }
 
-// Cuda Compatible
 func (gsc *GroundStationCalculation) calculateGSDistance(headPointAnomalyEl AnomalyElements, headPointAscension float64, anomaly float64, ascension float64) float64 {
 	orbitalCalculations := gsc.AnomalyCalculations.GetOrbitalCalculations()
 	ascensionDiff := headPointAscension - ascension
@@ -115,7 +175,6 @@ func (gsc *GroundStationCalculation) calculateGSDistance(headPointAnomalyEl Anom
 	return gsc.AnomalyCalculations.CalculateDistance(orbitalCalc, anomaly)
 }
 
-// Cuda Compatible
 func (gsc *GroundStationCalculation) coveringGroundStation(headPointAscension float64, headPointAnomalyEl AnomalyElements,
 	anomaly float64, timeStamp float64, earthRotationMotion float64, earthOrbitRatio float64, ascension float64,
 	altitude float64, distances *[]float64, gsInRange *[]string, gsName string) {
@@ -134,10 +193,26 @@ func (gsc *GroundStationCalculation) GetCoveringGroundStations(timeStamp float64
 	var gsInRange []string
 	earthOrbitRatio := 1.0 - orbit.GetAltitude()/orbit.GetRadius()
 
-	for gsName, gsSpec := range *gsc.GroundStations {
-		gsc.coveringGroundStation(gsSpec.HeadPointAscension, gsSpec.HeadPointAnomalyEl, anomaly, timeStamp,
-			gsc.EarthRotaionMotion, earthOrbitRatio, orbit.GetAscension(), orbit.GetAltitude(), &distances, &gsInRange, gsName)
+	if gsc.UseGPU {
+		var count C.int
+		gsInRangeC := make([][int(C.MAX_ID_LENGTH)]C.char, int(C.MAX_GROUND_STATIONS))
+		gsDistancesC := make([]C.double, int(C.MAX_GROUND_STATIONS))
+		C.covering_ground_stations(gsc.GroundStationCalculationC, C.double(anomaly), C.double(timeStamp),
+			C.double(earthOrbitRatio), C.double(orbit.GetAscension()), C.double(orbit.GetAltitude()),
+			(*C.double)(unsafe.Pointer(&gsDistancesC[0])), (*[int(C.MAX_ID_LENGTH)]C.char)(unsafe.Pointer(&gsInRangeC[0])),
+			&count)
+		for i := 0; i < int(count); i++ {
+			gsName := C.GoString(&gsInRangeC[i][0])
+			gsInRange = append(gsInRange, gsName)
+			distances = append(distances, float64(gsDistancesC[i]))
+		}
+	} else {
+		for gsName, gsSpec := range *gsc.GroundStations {
+			gsc.coveringGroundStation(gsSpec.HeadPointAscension, gsSpec.HeadPointAnomalyEl, anomaly, timeStamp,
+				gsc.EarthRotaionMotion, earthOrbitRatio, orbit.GetAscension(), orbit.GetAltitude(), &distances, &gsInRange, gsName)
+		}
 	}
+
 	return zip_gs_ids_with_distances(gsInRange, distances)
 }
 
