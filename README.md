@@ -14,6 +14,8 @@ The following project is a packet-level routing multi-process simulator for Low 
 5. [Numpy](https://numpy.org/)
 6. [Matplotlib](https://matplotlib.org/)
 7. [geopy 2.4.1](https://geopy.readthedocs.io/en/stable/index.html)
+8. [CUDA Toolkit 12.9](https://developer.nvidia.com/cuda-12-9-0-download-archive)
+9. [nx-cugraph-cu12](https://pypi.nvidia.com) (Install corresponding version to CUDA Toolkit: cu{$CUDA_VERSION})
 
 ## Input Files
 1. **Ground Station Locations:** The file should be located in the `./configs` folder. The file has a _CSV_ format with the following column structure: ``Id,Latitude,Longitude``, where `Id` is the unique name of the ground station, `Latitude` is the latitude of the corresponding ground station, and `Longitude` is the longitude for the corresponding ground station.
