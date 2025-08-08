@@ -33,35 +33,6 @@ double calculate_phase(int phase_diff_enabled, double anomaly_step, int satellit
     return phase;
 }
 
-double calculate_distance_by_satellite_id(const anomaly_calculations* anomaly_calc, 
-    int first_satellite_id, 
-    int first_satellite_orbit_id, 
-    int second_satellite_id, 
-    int second_satellite_orbit_id, 
-    double time_stamp) {
-
-    double first_phase = calculate_phase(anomaly_calc->phase_diff_enabled, anomaly_calc->anomaly_step, first_satellite_id, first_satellite_orbit_id);
-    double second_phase = calculate_phase(anomaly_calc->phase_diff_enabled, anomaly_calc->anomaly_step, second_satellite_id, second_satellite_orbit_id);
-    double phase_diff = first_phase - second_phase;
-    
-    double ascension_diff = (double)(first_satellite_orbit_id - second_satellite_orbit_id) * anomaly_calc->orbital_calc.ascension_step;
-    
-    double ascension_diff_sinus = sin(ascension_diff);
-    double ascension_diff_cosinus = cos(ascension_diff);
-    double phase_diff_sinus = sin(phase_diff);
-    double phase_diff_cosinus = cos(phase_diff);
-
-    double inclination_sinus = anomaly_calc->orbital_calc.inclination_sinus;
-    double inclination_cosinus = anomaly_calc->orbital_calc.inclination_cosinus;
-    double time_term_cosinus = cos(2.0 * anomaly_calc->mean_motion * time_stamp + first_phase + second_phase);
-    
-    double phase_diff_sinus_term = 2.0 * inclination_cosinus * ascension_diff_sinus * phase_diff_sinus;
-    double phase_diff_cosinus_term = ((1 + pow(inclination_cosinus, 2.0)) * ascension_diff_cosinus + pow(inclination_sinus, 2.0)) * phase_diff_cosinus;
-    double time_term = (1 - ascension_diff_cosinus) * pow(inclination_sinus, 2.0) * time_term_cosinus;
-    
-    return anomaly_calc->radius * sqrt(2.0 + phase_diff_sinus_term - phase_diff_cosinus_term + time_term);
-}
-
 void calculate_satellite_id_in_range(const anomaly_calculations* anomaly_calc,
     int orbit,
     orbit_calc orbit_calc,

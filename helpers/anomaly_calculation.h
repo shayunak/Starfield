@@ -27,15 +27,6 @@ double calculate_distance(double radius,
      double other_satellite_anomaly
     );
 
-double calculate_distance_by_satellite_id(const anomaly_calculations* anomaly_calc, 
-    int first_satellite_id, 
-    int first_satellite_orbit_id, 
-    int second_satellite_id, 
-    int second_satellite_orbit_id, 
-    double time_stamp
-);
-
-
 void find_satellites_in_range(const anomaly_calculations* anomaly_calc,
     const int* orbit,
     const orbit_calc* orbit_calc,

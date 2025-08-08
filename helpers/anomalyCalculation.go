@@ -64,23 +64,14 @@ func (anomalyCalc *AnomalyCalculations) GetMaxDistance() float64 {
 }
 
 func (anomalyCalc *AnomalyCalculations) CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64 {
-	if anomalyCalc.UseGPU {
-		orbitCalcC := C.orbit_calc{
-			cosinal_coefficient: C.double(orbitCalc.CosinalCoefficient),
-			sinal_coefficient:   C.double(orbitCalc.SinalCoefficient),
-			ascension_diff:      C.double(orbitCalc.AscensionDiff),
-		}
-		return float64(C.calculate_distance(C.double(anomalyCalc.Radius), orbitCalcC, C.double(otherSatelliteAnomaly)))
-	} else {
-		distance_squared_factor := 2 * (orbitCalc.CosinalCoefficient*math.Cos(otherSatelliteAnomaly) -
-			orbitCalc.SinalCoefficient*math.Sin(otherSatelliteAnomaly) + 1.0)
+	distance_squared_factor := 2 * (orbitCalc.CosinalCoefficient*math.Cos(otherSatelliteAnomaly) -
+		orbitCalc.SinalCoefficient*math.Sin(otherSatelliteAnomaly) + 1.0)
 
-		if distance_squared_factor <= 0.0 {
-			return 0.0
-		}
-
-		return anomalyCalc.Radius * math.Sqrt(distance_squared_factor)
+	if distance_squared_factor <= 0.0 {
+		return 0.0
 	}
+
+	return anomalyCalc.Radius * math.Sqrt(distance_squared_factor)
 }
 
 func (anomalyCalc *AnomalyCalculations) findDistanceforSatelliteId(i int, baseId string, orbit int, timeStamp float64, orbitCalc OrbitCalc,
@@ -197,31 +188,23 @@ func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId 
 func (anomalyCalc *AnomalyCalculations) CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int,
 	secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64 {
 
-	if anomalyCalc.UseGPU {
-		constellationName := C.CString(anomalyCalc.ConsellationName)
-		defer C.free(unsafe.Pointer(constellationName))
-		anomalyCalcC := anomalyCalc.makeAnomalyCalculationsC(constellationName)
-		return float64(C.calculate_distance_by_satellite_id(&anomalyCalcC, C.int(firstSatelliteId),
-			C.int(firstSatelliteOrbitId), C.int(secondSatelliteId), C.int(secondSatelliteOrbitId), C.double(timeStamp)))
-	} else {
-		firstPhase := anomalyCalc.calculatePhase(firstSatelliteId, firstSatelliteOrbitId)
-		secondPhase := anomalyCalc.calculatePhase(secondSatelliteId, secondSatelliteOrbitId)
-		phaseDiff := firstPhase - secondPhase
-		ascensionDiff := float64(firstSatelliteOrbitId-secondSatelliteOrbitId) * anomalyCalc.OrbitalCalculations.GetAscensionStep()
-		ascensionDiffSinus := math.Sin(ascensionDiff)
-		ascensionDiffCosinus := math.Cos(ascensionDiff)
-		phaseDiffSinus := math.Sin(phaseDiff)
-		phaseDiffCosinus := math.Cos(phaseDiff)
-		inclinationSinus := anomalyCalc.OrbitalCalculations.GetInclinationSinus()
-		inclinationCosinus := anomalyCalc.OrbitalCalculations.GetInclinationCosinus()
-		timeTermCosinus := math.Cos(2.0*anomalyCalc.MeanMotion*timeStamp + firstPhase + secondPhase)
+	firstPhase := anomalyCalc.calculatePhase(firstSatelliteId, firstSatelliteOrbitId)
+	secondPhase := anomalyCalc.calculatePhase(secondSatelliteId, secondSatelliteOrbitId)
+	phaseDiff := firstPhase - secondPhase
+	ascensionDiff := float64(firstSatelliteOrbitId-secondSatelliteOrbitId) * anomalyCalc.OrbitalCalculations.GetAscensionStep()
+	ascensionDiffSinus := math.Sin(ascensionDiff)
+	ascensionDiffCosinus := math.Cos(ascensionDiff)
+	phaseDiffSinus := math.Sin(phaseDiff)
+	phaseDiffCosinus := math.Cos(phaseDiff)
+	inclinationSinus := anomalyCalc.OrbitalCalculations.GetInclinationSinus()
+	inclinationCosinus := anomalyCalc.OrbitalCalculations.GetInclinationCosinus()
+	timeTermCosinus := math.Cos(2.0*anomalyCalc.MeanMotion*timeStamp + firstPhase + secondPhase)
 
-		phaseDiffSinusTerm := 2.0 * inclinationCosinus * ascensionDiffSinus * phaseDiffSinus
-		phaseDiffCosinusTerm := ((1+math.Pow(inclinationCosinus, 2.0))*ascensionDiffCosinus + math.Pow(inclinationSinus, 2.0)) * phaseDiffCosinus
-		timeTerm := (1 - ascensionDiffCosinus) * math.Pow(inclinationSinus, 2.0) * timeTermCosinus
+	phaseDiffSinusTerm := 2.0 * inclinationCosinus * ascensionDiffSinus * phaseDiffSinus
+	phaseDiffCosinusTerm := ((1+math.Pow(inclinationCosinus, 2.0))*ascensionDiffCosinus + math.Pow(inclinationSinus, 2.0)) * phaseDiffCosinus
+	timeTerm := (1 - ascensionDiffCosinus) * math.Pow(inclinationSinus, 2.0) * timeTermCosinus
 
-		return anomalyCalc.Radius * math.Sqrt(2.0+phaseDiffSinusTerm-phaseDiffCosinusTerm+timeTerm)
-	}
+	return anomalyCalc.Radius * math.Sqrt(2.0+phaseDiffSinusTerm-phaseDiffCosinusTerm+timeTerm)
 }
 
 func (anomalyCalc *AnomalyCalculations) makeAnomalyCalculationsC(constellationName *C.char) C.anomaly_calculations {
