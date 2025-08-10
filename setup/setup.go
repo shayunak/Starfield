@@ -80,6 +80,8 @@ func initLogger(logger *actors.ILogger, config Config, timeStep int, totalSimula
 		RemainingUnprocessedPackets: totalNumberOfPackets,
 		TimeStep:                    timeStep,
 		TimeStamp:                   0,
+		NumberOfOrbits:              config.OrbitConfig.NumberOfOrbits,
+		NumberOfSatellitesPerOrbit:  config.OrbitConfig.NumberOfSatellitesPerOrbit,
 	}
 	return &coordinatorChannel
 }

@@ -26,8 +26,10 @@ type Logger struct {
 	DeviceNames                 []string
 	Events                      helpers.SimulationEntryList
 	// Distances Mode
-	DistancesLoggerChannels *DistanceLoggerDeviceChannels
-	DistanceEntries         helpers.DistanceEntryList
+	DistancesLoggerChannels    *DistanceLoggerDeviceChannels
+	DistanceEntries            helpers.DistanceEntryList
+	NumberOfOrbits             int
+	NumberOfSatellitesPerOrbit int
 }
 
 type DistanceLoggerDeviceChannel chan UpdateDistancesMessage
@@ -147,8 +149,8 @@ func (logger *Logger) logDistancesSimulationSummary() {
 		}
 	}
 
-	fileName := fmt.Sprintf("./generated/Distances#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
-		logger.ConsellationName, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
+	fileName := fmt.Sprintf("./generated/Distances#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
 	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)
