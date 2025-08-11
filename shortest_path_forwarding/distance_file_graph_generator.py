@@ -4,11 +4,8 @@ import networkx as nx
 import pandas as pd
 
 class CUGraphBuilder:
-    def build_graph(self, src, dst, weight):
-        g = cugraph.Graph()
-        graph_df = cudf.DataFrame({'src': src, 'dst': dst, 'weight': weight})
-        g.from_cudf(graph_df, 'src', 'dst', 'weight')
-        return g
+    def build_graph(self, src, dst, weight): 
+        return cudf.DataFrame({'src': src, 'dst': dst, 'weight': weight})
 
 class NXGraphBuilder:
     def build_graph(self, src, dst, weight):
@@ -18,10 +15,18 @@ class NXGraphBuilder:
         return g
 
 class GraphGenerator:
-    def __init__(self, distances_df, constellation_name, graph_builder):
+    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes):
         self.distances_df = distances_df
         self.constellation_name = constellation_name
         self.graph_builder = graph_builder
+        self.number_of_nodes = number_of_nodes
+
+    def is_ground_station(self, node_id):
+        splitted_id = node_id.split("-")
+        if (len(splitted_id) == 3) and (splitted_id[0] == self.constellation_name):
+            return False
+        
+        return True
 
     def check_sanity(self, time_stamp_data, time_stamp):
         pass
@@ -43,7 +48,7 @@ class GraphGenerator:
         for _, row in timestamp_data.iterrows():
             if row['FirstDeviceId'] != row['SecondDeviceId']:
                 if self.is_satellite_id(row['FirstDeviceId']) and self.is_satellite_id(row['SecondDeviceId']):
-                    if self.check_isl_edge(row['FirstDeviceId'], row['SecondDeviceId']):
+                    if self.check_isl_edge(row['FirstDeviceId'], row['SecondDeviceId'], time_stamp):
                         src.append(row['FirstDeviceId'])
                         dst.append(row['SecondDeviceId'])
                         weight.append(row['Distance(m)'])
@@ -55,8 +60,8 @@ class GraphGenerator:
         return self.graph_builder.build_graph(src, dst, weight)
 
 class GridPlusGraphGenerator(GraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_orbits, number_of_satellites_per_orbit):
-        super().__init__(distances_df, constellation_name, graph_builder)
+    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, number_of_orbits, number_of_satellites_per_orbit):
+        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes)
         self.number_of_orbits = number_of_orbits
         self.number_of_satellites_per_orbit = number_of_satellites_per_orbit
 
@@ -83,13 +88,13 @@ class GridPlusGraphGenerator(GraphGenerator):
         return False
     
 class TopologyGraphGenerator(GraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder)
+    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
+        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes)
         self.topology = self.load_topology(topology_file)
 
 class StaticTopologyGraphGenerator(TopologyGraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder, topology_file)
+    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
+        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes, topology_file)
 
     def load_topology(self, topology_file):
         topology_dataframe = pd.read_csv(f"./input/{topology_file}")
@@ -104,8 +109,8 @@ class StaticTopologyGraphGenerator(TopologyGraphGenerator):
         return (first_satellite_name, second_satellite_name) in self.topology
         
 class DynamicTopologyGraphGenerator(TopologyGraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder, topology_file)
+    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
+        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes, topology_file)
 
     def load_topology(self, topology_file):
         topology_dataframe = pd.read_csv(f"./input/{topology_file}")

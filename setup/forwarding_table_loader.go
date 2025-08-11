@@ -31,7 +31,7 @@ func LoadForwardingTableInMemory(forwardingFileName string) map[int]actors.Forwa
 		if forwardingTable[timeStamp] == nil {
 			forwardingTable[timeStamp] = make(actors.ForwardingEntry)
 		}
-		forwardingTable[timeStamp][record[2]] = record[3]
+		forwardingTable[timeStamp][record[1]] = record[2]
 	}
 
 	return forwardingTable

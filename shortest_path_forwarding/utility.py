@@ -31,7 +31,7 @@ def forwarding_folder_csv_file(simulation_details, title, nodes):
     for node in nodes:
         file = open(f"./forwarding_table/{folder_name}/{node}.csv", "w", newline= "")
         csv_writer = csv.writer(file)
-        csv_writer.writerow(["TimeStamp", "Source", "Destination", "NextHop"])
+        csv_writer.writerow(["TimeStamp", "Destination", "NextHop"])
         node_files.append(file)
         node_writers[node] = csv_writer
 
@@ -44,6 +44,6 @@ def close_files(node_files):
 def printHelp():
     print("shortest_path.py --help")
     print("shortest_path.py --dijkstra [distance file]")
-    print("shortest_path.py --dijkstra_grid_plus [distance file] [number of orbits] [number of satellites per orbit]")
+    print("shortest_path.py --dijkstra_grid_plus [distance file]")
     print("shortest_path.py --dijkstra_static [distance file] [topology_file_static]")
     print("shortest_path.py --dijkstra_dynamic [distance file] [topology_file_dynamic]")
