@@ -15,7 +15,7 @@ class CUGraphBuilder:
     def build_graph(self, src, dst, weight): 
         g = cugraph.Graph()
         df = cudf.DataFrame({'src': self.to_id(src), 'dst': self.to_id(dst), 'weight': weight})
-        g.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight', renumber=True)
+        g.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight', renumber=False)
         return g
 
 class NXGraphBuilder:

@@ -8,26 +8,22 @@ import pandas as pd
 import cupy as cp
 from multiprocessing import Process, Queue, set_start_method
 
-def gpu_next_hop(df):
-    df['next_hop'] = df['vertex']
+def next_hop(df):
+    pred_map = dict(zip(zip(df['Source'], df['vertex']), df['predecessor']))
 
-    while True:
-        join_df = df[['vertex', 'predecessor']].rename(columns={'vertex': 'next_hop', 'predecessor': 'next_pred'})
-        df = df.merge(join_df, on='next_hop', how='left')
-        
-        new_next_hop = df['next_pred'].where((df['next_pred'] != df['Source']) & (df['next_pred'] != -1), df['next_hop'])
+    def find_next_hop(v, source):
+        curr = v
+        prev = pred_map.get((source, curr), -1)
+        if prev in (-1, source):
+            return curr
+        while prev != -1 and prev != source:
+            curr = prev
+            prev = pred_map.get((source, curr), -1)
+        return curr
 
-        if (new_next_hop != df['next_hop']).any():
-            df['next_hop'] = new_next_hop
-            df = df.drop(columns=['next_pred'])
-        else:
-            df = df.drop(columns=['next_pred'])
-            break
+    df['NextHop'] = [find_next_hop(v, s) for v, s in zip(df['vertex'], df['Source'])]
 
-    df = df.rename(columns={
-        'vertex': 'Destination',
-        'next_hop': 'NextHop'
-    })
+    df.rename(columns={'vertex': 'Destination'}, inplace=True)
 
     return df[['TimeStamp', 'Source', 'Destination', 'NextHop']]
 
@@ -39,8 +35,7 @@ def all_pairs_shortest_path_async(G, time_stamp):
         sssp_df = cugraph.sssp(G, source=src)
         sssp_df['Source'] = src
         sssp_df['TimeStamp'] = time_stamp
-        next_hop_df = gpu_next_hop(sssp_df)
-        all_next_hops.append(next_hop_df)
+        all_next_hops.append(sssp_df)
 
     return cudf.concat(all_next_hops, ignore_index=True)
 
@@ -51,14 +46,13 @@ def run_batch_graphs(graph_generator, offset, time_step, batch_size):
 
     for i, (g, stream) in enumerate(zip(graphs, streams)):
         with stream:
-            batch_result.append(all_pairs_shortest_path_async(g, offset + i * time_step))
+           batch_result.append(all_pairs_shortest_path_async(g, offset + i * time_step))
 
     for s in streams:
         s.synchronize()
 
-    gpu_results = cudf.concat(batch_result, ignore_index=True)
-    cpu_results = gpu_results.to_pandas()
-    del gpu_results
+    gpu_result = [next_hop(df.to_pandas()) for df in batch_result]
+    cpu_results = pd.concat(gpu_result, ignore_index=True)
     gc.collect()
     cp.get_default_memory_pool().free_all_blocks()
     cp.get_default_pinned_memory_pool().free_all_blocks()
@@ -173,7 +167,6 @@ def calculate_shortest_paths(node_writers, node_files, total_time, time_step, gr
 def dijkstra_shortest_path_algorithm(distance_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraForwardingTable", nodes)
-    total_time = 120000
     graph_generator = dfg.GraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes))
     calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator)
 
