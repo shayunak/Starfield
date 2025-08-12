@@ -3,6 +3,7 @@ import utility as util
 import distance_file_graph_generator as dfg
 import cugraph
 import cudf
+import gc
 import pandas as pd
 import cupy as cp
 from multiprocessing import Process, Queue, set_start_method
@@ -14,7 +15,7 @@ def gpu_next_hop(df):
         join_df = df[['vertex', 'predecessor']].rename(columns={'vertex': 'next_hop', 'predecessor': 'next_pred'})
         df = df.merge(join_df, on='next_hop', how='left')
         
-        new_next_hop = df['next_pred'].where((df['next_pred'] != df['source']) & (df['next_pred'] != -1), df['next_hop'])
+        new_next_hop = df['next_pred'].where((df['next_pred'] != df['Source']) & (df['next_pred'] != -1), df['next_hop'])
 
         if (new_next_hop != df['next_hop']).any():
             df['next_hop'] = new_next_hop
@@ -28,7 +29,7 @@ def gpu_next_hop(df):
         'next_hop': 'NextHop'
     })
 
-    return df[['Source', 'Destination', 'NextHop']]
+    return df[['TimeStamp', 'Source', 'Destination', 'NextHop']]
 
 def all_pairs_shortest_path_async(G, time_stamp):
     all_next_hops = []
@@ -37,13 +38,11 @@ def all_pairs_shortest_path_async(G, time_stamp):
     for src in nodes:
         sssp_df = cugraph.sssp(G, source=src)
         sssp_df['Source'] = src
-        all_next_hops.append(sssp_df)
-            
-    sssp_all = cudf.concat(all_next_hops, ignore_index=True)
-    next_hop_df = gpu_next_hop(sssp_all)
-    next_hop_df.insert(0, 'TimeStamp', time_stamp)
+        sssp_df['TimeStamp'] = time_stamp
+        next_hop_df = gpu_next_hop(sssp_df)
+        all_next_hops.append(next_hop_df)
 
-    return next_hop_df
+    return cudf.concat(all_next_hops, ignore_index=True)
 
 def run_batch_graphs(graph_generator, offset, time_step, batch_size):
     batch_result = []
@@ -60,11 +59,18 @@ def run_batch_graphs(graph_generator, offset, time_step, batch_size):
     gpu_results = cudf.concat(batch_result, ignore_index=True)
     cpu_results = gpu_results.to_pandas()
     del gpu_results
+    gc.collect()
+    cp.get_default_memory_pool().free_all_blocks()
+    cp.get_default_pinned_memory_pool().free_all_blocks()
 
-    return cpu_results[cpu_results.apply(
+    cpu_results['NextHop'] = cpu_results['NextHop'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
+    cpu_results['Source'] = cpu_results['Source'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
+    cpu_results['Destination'] = cpu_results['Destination'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
+    cpu_results = cpu_results[cpu_results.apply(
         lambda row: graph_generator.is_ground_station(row['Destination']),
         axis=1
     )]
+    return cpu_results
 
 def calculate_batch_size(number_of_nodes, gpu_id):
     with cp.cuda.Device(gpu_id):
@@ -127,7 +133,7 @@ def gpu_worker(gpu_id, period, time_step, graph_generator, out_q):
     out_q.put(None)
 
 def distribute_graphs_on_gpus(total_time, time_step, graph_generator):
-    set_start_method("fork")
+    set_start_method("spawn")
     n_gpu = cp.cuda.runtime.getDeviceCount()
     gpu_weights = get_normalized_gpu_mem_size(n_gpu)
     graphs_on_gpus = partition_on_gpus(total_time, time_step, gpu_weights)
@@ -159,7 +165,7 @@ def calculate_shortest_paths(node_writers, node_files, total_time, time_step, gr
     result_df = distribute_graphs_on_gpus(total_time, time_step, graph_generator)
     for source, group_df in result_df.groupby('Source'):
         for row in group_df.itertuples(index=False):
-            node_writers[source].writerow(row['TimeStamp'], row['Destination'], row['NextHop'])
+            node_writers[source].writerow((row.TimeStamp, row.Destination, row.NextHop))
 
     util.close_files(node_files)
     
@@ -167,19 +173,20 @@ def calculate_shortest_paths(node_writers, node_files, total_time, time_step, gr
 def dijkstra_shortest_path_algorithm(distance_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraForwardingTable", nodes)
-    graph_generator = dfg.GraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(), len(nodes))
+    total_time = 120000
+    graph_generator = dfg.GraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes))
     calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator)
 
 def dijkstra_grid_plus_shortest_path_algorithm(distance_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, number_of_orbits, number_of_satellites_per_orbit = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraGridPlusForwardingTable", nodes)
-    grid_plus_graph_generator = dfg.GridPlusGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(), len(nodes), number_of_orbits, number_of_satellites_per_orbit)
+    grid_plus_graph_generator = dfg.GridPlusGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes), number_of_orbits, number_of_satellites_per_orbit)
     calculate_shortest_paths(node_writers, node_files, total_time, time_step, grid_plus_graph_generator)
 
 def dijkstra_static_topology_shortest_path_algorithm(distance_file_name, topology_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraStaticForwardingTable", nodes)
-    static_topology_graph_generator = dfg.StaticTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(), len(nodes),topology_file_name)
+    static_topology_graph_generator = dfg.StaticTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes),topology_file_name)
     calculate_shortest_paths(node_writers, node_files, total_time, time_step, static_topology_graph_generator)
 
 
