@@ -1,7 +1,6 @@
-import cudf, cugraph
+import cudf
 import networkx as nx
 import pandas as pd
-import numpy as np
 from multiprocessing import shared_memory
 
 class CUGraphBuilder:
@@ -13,10 +12,7 @@ class CUGraphBuilder:
         return [self.node_to_id[node] for node in nodes]
 
     def build_graph(self, src, dst, weight): 
-        g = cugraph.Graph()
-        df = cudf.DataFrame({'src': self.to_id(src), 'dst': self.to_id(dst), 'weight': weight})
-        g.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight', renumber=False)
-        return g
+        return cudf.DataFrame({'src': self.to_id(src), 'dst': self.to_id(dst), 'weight': weight})
 
 class NXGraphBuilder:
     def build_graph(self, src, dst, weight):
