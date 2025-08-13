@@ -87,8 +87,10 @@ def get_consistent_distance_graph(df, distance_file_name, nodes, constellation_n
     satellite_nodes = [node for node in nodes if not is_ground_station(node, constellation_name)]
     consistent_distance_graph = generate_general_satellite_graph_from_timestamp_data(0, df, satellite_nodes, constellation_name)
     for time_stamp in range(time_step, total_time + time_step, time_step):
+        start_time = time.time()
         graph = generate_general_satellite_graph_from_timestamp_data(time_stamp, df, satellite_nodes, constellation_name)
         consistent_distance_graph = nx.intersection(consistent_distance_graph, graph)
+        print(f"Time taken for timestamp {time_stamp}: {time.time() - start_time} seconds")
 
     consistent_edges = []
     for u, v in consistent_distance_graph.edges():

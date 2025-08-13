@@ -30,7 +30,7 @@ def generate_intra_orbit_isls(graph, orbit, number_of_satellites_per_orbit, cons
             selected_neighbor = random.sample(possible_neighbors, 1)
             if not graph.has_edge(satellite_id, selected_neighbor[0]):
                 graph.add_edge(satellite_id, selected_neighbor[0])
-                possible_neighbors = [neighbor for neighbor in possible_neighbors if graph.degree(neighbor) < number_of_isls]
+                possible_neighbors = [neighbor for neighbor in possible_neighbors if graph.degree(neighbor) < number_of_isls and not graph.has_edge(satellite_id, neighbor)]
 
 def generate_inter_orbit_isls(graph, orbit, number_of_satellites_per_orbit, number_of_orbits, constellation_name, distance_graph, isls_between_orbits):
     base_satellite_id = f"{constellation_name}-{orbit}-0"
