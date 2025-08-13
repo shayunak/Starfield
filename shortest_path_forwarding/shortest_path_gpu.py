@@ -175,7 +175,7 @@ def get_total_gpu_memory():
 
 def calculate_batch_size(number_of_nodes):
     mem_size = get_total_gpu_memory()
-    computable_space = mem_size // (4 * SOURCE_COMPUTATION_CHUNKS)
+    computable_space = mem_size // (8 * SOURCE_COMPUTATION_CHUNKS)
     batch_size = computable_space // (24 * number_of_nodes**2)
     return max(1, batch_size)
 
@@ -206,7 +206,7 @@ def split_into_chunks(lst, n):
 
     return chunks
 
-def run_batch_graphs(start_time, client, graph_generator, offset, time_step, batch_size):
+def run_batch_graphs(client, graph_generator, offset, time_step, batch_size):
     future_graphs, future_src, future_timestamps = [], [], []
     for time_stamp in range(offset, offset+batch_size*time_step, time_step):
         g, sources = graph_generator.get_graph(time_stamp)
@@ -215,12 +215,8 @@ def run_batch_graphs(start_time, client, graph_generator, offset, time_step, bat
         future_src += sources_chunks
         future_timestamps += [time_stamp] * SOURCE_COMPUTATION_CHUNKS
 
-    print(f"graphs ready for {offset} to {offset + (batch_size - 1) * time_step} in {time.time() - start_time} seconds")
-
-    start_gpu_calc = time.time()
     futures = client.map(shortest_path_async, future_graphs, future_src, future_timestamps)
     batch_result = client.gather(futures)
-    print(f"GPU calculations done in {time.time() - start_gpu_calc} seconds")
 
     gpu_result = []
     for df in batch_result:
@@ -240,7 +236,7 @@ def run_batch_graphs(start_time, client, graph_generator, offset, time_step, bat
     return cpu_results
 
 def distribute_graphs_on_gpus(total_time, time_step, graph_generator):
-    cluster = dask_cuda.LocalCUDACluster()
+    cluster = dask_cuda.LocalCUDACluster(rmm_pool_size="6GB", enable_cudf_spill=True)
     client = dask.distributed.Client(cluster)
     print(client)
 
@@ -249,7 +245,7 @@ def distribute_graphs_on_gpus(total_time, time_step, graph_generator):
     for offset in range(0, total_time + time_step, max_batch_size * time_step):
         start_time = time.time()
         batch_size = min(max_batch_size, (total_time - offset) // time_step + 1)
-        results.append(run_batch_graphs(start_time, client, graph_generator, offset, time_step, batch_size))
+        results.append(run_batch_graphs(client, graph_generator, offset, time_step, batch_size))
         print(f"Calculated forwarding table for batch timestamps {offset} to {offset + (batch_size - 1) * time_step} in {time.time() - start_time} seconds")
 
     client.close()

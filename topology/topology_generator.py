@@ -44,8 +44,8 @@ def generate_inter_orbit_isls(graph, orbit, number_of_satellites_per_orbit, numb
             neighbor_id = f"{constellation_name}-{(orbit + 1) % number_of_orbits}-{(id + pattern) % number_of_satellites_per_orbit}"
             graph.add_edge(satellite_id, neighbor_id)
 
-def generate_random_topology(distance_file, num_orbits, num_satellites, num_isls):
-    df, constellation_name, time_step, total_time, simulation_details, nodes = cdg.read_distance_file(distance_file)
+def generate_random_topology(distance_file, num_isls):
+    df, constellation_name, time_step, total_time, simulation_details, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
     consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df, nodes, constellation_name, time_step, total_time)
     topology_graph = nx.Graph()
     topology_graph.add_nodes_from(satellite_nodes)
@@ -74,7 +74,7 @@ def save_topology_to_file(graph, nodes, filename):
 
 def printHelp():
     print("topology_generator.py --help")
-    print("topology_generator.py --random_static [distance_file] [number of orbits] [number of satellites per orbit] [number of ISLs]")
+    print("topology_generator.py --random_static [distance_file] [number of ISLs]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -84,8 +84,8 @@ if __name__ == "__main__":
     
     if sys.argv[1] == "--help":
         printHelp()
-    elif sys.argv[1] == "--random_static" and len(sys.argv) == 6:
-        generate_random_topology(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
+    elif sys.argv[1] == "--random_static" and len(sys.argv) == 4:
+        generate_random_topology(sys.argv[2], int(sys.argv[3]))
     else:
         print("Invalid Option or Missing Arguments!")
         printHelp()

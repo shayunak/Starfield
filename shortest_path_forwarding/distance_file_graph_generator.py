@@ -54,22 +54,34 @@ class GraphGenerator:
         return True
 
     def get_graph(self, time_stamp):
-        src, dst, weight = [], [], []
         timestamp_data = self.distances_df.loc[self.distances_df['TimeStamp(ms)'] == time_stamp]
         self.check_sanity(timestamp_data, time_stamp)
 
-        for _, row in timestamp_data.iterrows():
-            if row['FirstDeviceId'] != row['SecondDeviceId']:
-                if self.is_satellite_id(row['FirstDeviceId']) and self.is_satellite_id(row['SecondDeviceId']):
-                    if self.check_isl_edge(row['FirstDeviceId'], row['SecondDeviceId'], time_stamp):
-                        src.append(row['FirstDeviceId'])
-                        dst.append(row['SecondDeviceId'])
-                        weight.append(row['Distance(m)'])
-                else:
-                    src.append(row['FirstDeviceId'])
-                    dst.append(row['SecondDeviceId'])
-                    weight.append(row['Distance(m)'])
-                
+        timestamp_data = timestamp_data.loc[
+            timestamp_data['FirstDeviceId'] != timestamp_data['SecondDeviceId']
+        ]
+
+        first_is_sat = timestamp_data['FirstDeviceId'].apply(self.is_satellite_id)
+        second_is_sat = timestamp_data['SecondDeviceId'].apply(self.is_satellite_id)
+
+        both_sat_mask = first_is_sat & second_is_sat
+        sat_pairs = timestamp_data.loc[both_sat_mask]
+
+        if not sat_pairs.empty:
+            isl_mask = [
+                self.check_isl_edge(f, s, time_stamp)
+                for f, s in zip(sat_pairs['FirstDeviceId'], sat_pairs['SecondDeviceId'])
+            ]
+            sat_pairs = sat_pairs.loc[isl_mask]
+
+        non_sat_pairs = timestamp_data.loc[~both_sat_mask]
+
+        final_edges = pd.concat([sat_pairs, non_sat_pairs], ignore_index=True)
+
+        src = final_edges['FirstDeviceId'].tolist()
+        dst = final_edges['SecondDeviceId'].tolist()
+        weight = final_edges['Distance(m)'].tolist()
+
         return self.graph_builder.build_graph(src, dst, weight)
 
 class GridPlusGraphGenerator(GraphGenerator):
