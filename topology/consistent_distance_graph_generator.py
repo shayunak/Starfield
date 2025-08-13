@@ -21,28 +21,50 @@ def read_distance_file(filename):
     splited_filename = filename[:-4].split("#")
     if len(splited_filename) != 5:
         raise NameError("Incorrect distance file name format!")
-    if splited_filename[0] != "Distances":
-        raise NameError("Only distances files are accepted, and they start with 'Distances'!")
+
+    if splited_filename[0] != "Distances" and splited_filename[0] != "ConsistentDistances":
+        raise NameError("Only distances or consistent distances files are accepted, and they start with 'Distances' or 'ConsistentDistances'!")
     time_step = int(splited_filename[3][:-2])
     total_time = int(splited_filename[4][:-1]) * 1000
     simulation_details = f"{splited_filename[2]}#{splited_filename[3]}#{splited_filename[4]}"
     constellation_name, orbital_structure = splited_filename[2].split("(")
     number_of_orbits, number_of_satellites_per_orbit = map(int, orbital_structure.rstrip(")").split(","))
-    distance_csv_dataframe = pd.read_csv(
-        f"./generated/{filename}",
-        engine="pyarrow",
-        sep=",",
-        dtype={
-            "TimeStamp(ms)": "int64",
-            "FirstDeviceId": "string",
-            "SecondDeviceId": "string",
-            "Distance(m)": "int64",
-        }                 
-    )
-    nodes = distance_csv_dataframe['FirstDeviceId'].unique().tolist()
-    print(f"Read distance file '{filename}' with {len(nodes)} nodes, time step {time_step} ms, and total time {total_time} ms.")
 
-    return distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, number_of_orbits, number_of_satellites_per_orbit
+    if splited_filename[0] == "Distances":
+        distance_csv_dataframe = pd.read_csv(
+            f"./generated/{filename}",
+            engine="pyarrow",
+            sep=",",
+            dtype={
+                "TimeStamp(ms)": "int64",
+                "FirstDeviceId": "string",
+                "SecondDeviceId": "string",
+                "Distance(m)": "int64",
+            }                 
+        )
+        distance_csv_dataframe.drop("Distance(m)", axis=1)
+        nodes = distance_csv_dataframe['FirstDeviceId'].unique().tolist()
+        print(f"Read distance file '{filename}' with {len(nodes)} nodes, time step {time_step} ms, and total time {total_time} ms.")
+        return False, distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, number_of_orbits, number_of_satellites_per_orbit
+    else:
+        distance_csv_dataframe = pd.read_csv(
+            f"./generated/{filename}",
+            engine="pyarrow",
+            sep=",",
+            dtype={
+                "FirstSatelliteId": "string",
+                "SecondSatelliteId": "string",
+            }                 
+        )
+        nodes = distance_csv_dataframe['FirstSatelliteId'].unique().tolist()
+        consistent_graph = nx.from_pandas_edgelist(
+            distance_csv_dataframe,
+            source="FirstSatelliteId",
+            target="SecondSatelliteId",
+            create_using=nx.Graph()  # Ensures undirected
+        )
+        print(f"Read consistent distance file '{filename}' with {len(nodes)} nodes, time step {time_step} ms, and total time {total_time} ms.")
+        return True, consistent_graph, constellation_name, time_step, total_time, simulation_details, nodes, number_of_orbits, number_of_satellites_per_orbit
 
 def generate_general_satellite_graph_from_timestamp_data(time_stamp, dataframe, nodes, constellation_name):
     timestamp_data = dataframe.loc[dataframe['TimeStamp(ms)'] == time_stamp]
@@ -56,14 +78,24 @@ def generate_general_satellite_graph_from_timestamp_data(time_stamp, dataframe, 
 
     G = nx.Graph()
     G.add_nodes_from(nodes)
-    G.add_edges_from(filtered.itertuples(index=False, name=None))
+    G.add_edges_from(
+        (u, v) for u, v in filtered.itertuples(index=False, name=None)
+    )
     return G
 
-def get_consistent_distance_graph(df, nodes, constellation_name, time_step, total_time):
+def get_consistent_distance_graph(df, distance_file_name, nodes, constellation_name, time_step, total_time):
     satellite_nodes = [node for node in nodes if not is_ground_station(node, constellation_name)]
     consistent_distance_graph = generate_general_satellite_graph_from_timestamp_data(0, df, satellite_nodes, constellation_name)
     for time_stamp in range(time_step, total_time + time_step, time_step):
         graph = generate_general_satellite_graph_from_timestamp_data(time_stamp, df, satellite_nodes, constellation_name)
         consistent_distance_graph = nx.intersection(consistent_distance_graph, graph)
+
+    consistent_edges = []
+    for u, v in consistent_distance_graph.edges():
+        consistent_edges.append((u, v))
+        consistent_edges.append((v, u))
+
+    edges_df = pd.DataFrame(consistent_edges, columns=["FirstSatelliteId", "SecondSatelliteId"])
+    edges_df.to_csv(f"./generated/Consistent{distance_file_name}", index=False)
 
     return consistent_distance_graph, satellite_nodes

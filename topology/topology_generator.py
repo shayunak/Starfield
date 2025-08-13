@@ -45,8 +45,11 @@ def generate_inter_orbit_isls(graph, orbit, number_of_satellites_per_orbit, numb
             graph.add_edge(satellite_id, neighbor_id)
 
 def generate_random_topology(distance_file, num_isls):
-    df, constellation_name, time_step, total_time, simulation_details, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
-    consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df, nodes, constellation_name, time_step, total_time)
+    is_consistent_graph, df_graph, constellation_name, time_step, total_time, simulation_details, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
+    consistent_distance_graph, satellite_nodes = df_graph, nodes
+    if not is_consistent_graph:
+        consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
+    
     topology_graph = nx.Graph()
     topology_graph.add_nodes_from(satellite_nodes)
 
