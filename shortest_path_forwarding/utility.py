@@ -12,7 +12,17 @@ def read_distance_file(filename):
     simulation_details = f"{splited_filename[2]}#{splited_filename[3]}#{splited_filename[4]}"
     constellation_name, orbital_structure = splited_filename[2].split("(")
     number_of_orbits, number_of_satellites_per_orbit = map(int, orbital_structure.rstrip(")").split(","))
-    distance_csv_dataframe = pd.read_csv(f"./generated/{filename}")
+    distance_csv_dataframe = pd.read_csv(
+        f"./generated/{filename}",
+        engine="pyarrow",
+        sep=",",
+        dtype={
+            "TimeStamp(ms)": "int64",
+            "FirstDeviceId": "string",
+            "SecondDeviceId": "string",
+            "Distance(m)": "int64",
+        }                 
+    )
     nodes = distance_csv_dataframe['FirstDeviceId'].unique().tolist()
     print(f"Read distance file '{filename}' with {len(nodes)} nodes, time step {time_step} ms, and total time {total_time} ms.")
 

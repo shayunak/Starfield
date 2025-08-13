@@ -1,21 +1,24 @@
 import sys
+from time import time
 import distance_file_graph_generator as dfg
 import networkx as nx
 import utility as util
+import time
 
 def calculate_shortest_path_hops(csv_writers, timestamp, distance_graph, graph_generator):
     paths = nx.all_pairs_dijkstra_path(distance_graph)
     for node, other_nodes in paths:
         for other_node, path in other_nodes.items():
-            if other_node != node and graph_generator.is_ground_station(other_node):
+            if other_node != node and not graph_generator.is_satellite_id(other_node):
                 csv_writers[node].writerow((timestamp, other_node, path[1]))
 
 def calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator):
     for time_stamp in range(0, total_time + 1, time_step):
+        start_time = time.time()
         graph = graph_generator.get_graph(time_stamp)
         calculate_shortest_path_hops(node_writers, time_stamp, graph, graph_generator)
-        print(f"Calculated forwarding table for timestamp {time_stamp}...")
-    
+        print(f"Calculated forwarding table for timestamp {time_stamp} in {time.time() - start_time} seconds")
+
     util.close_files(node_files)
 
 def dijkstra_shortest_path_algorithm(distance_file_name):

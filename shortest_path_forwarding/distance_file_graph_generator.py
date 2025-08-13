@@ -1,18 +1,31 @@
 import cudf
 import networkx as nx
 import pandas as pd
-from multiprocessing import shared_memory
 
 class CUGraphBuilder:
-    def __init__(self, nodes):
+    def __init__(self, nodes, constellation_name):
         self.node_to_id = {node: i for i, node in enumerate(nodes)}
         self.id_to_node = {i: node for node, i in self.node_to_id.items()}
+        self.constellation_name = constellation_name
+        self.ground_station_id_set = {i for i, node in self.id_to_node.items() if self.is_ground_station(node)}
     
+    def is_id_ground_station(self, id):
+        return id in self.ground_station_id_set
+
+    def is_ground_station(self, node_id):
+        splitted_id = node_id.split("-")
+        if (len(splitted_id) == 3) and (splitted_id[0] == self.constellation_name):
+            return False
+        
+        return True
+
     def to_id(self, nodes):
         return [self.node_to_id[node] for node in nodes]
 
-    def build_graph(self, src, dst, weight): 
-        return cudf.DataFrame({'src': self.to_id(src), 'dst': self.to_id(dst), 'weight': weight})
+    def build_graph(self, src, dst, weight):
+        sources = self.to_id(src)
+        unique_sources = list(set(sources))
+        return cudf.DataFrame({'src': sources, 'dst': self.to_id(dst), 'weight': weight}), unique_sources
 
 class NXGraphBuilder:
     def build_graph(self, src, dst, weight):
@@ -27,13 +40,6 @@ class GraphGenerator:
         self.constellation_name = constellation_name
         self.graph_builder = graph_builder
         self.number_of_nodes = number_of_nodes
-
-    def is_ground_station(self, node_id):
-        splitted_id = node_id.split("-")
-        if (len(splitted_id) == 3) and (splitted_id[0] == self.constellation_name):
-            return False
-        
-        return True
 
     def check_sanity(self, time_stamp_data, time_stamp):
         pass

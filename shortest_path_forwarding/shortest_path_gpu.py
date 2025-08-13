@@ -1,12 +1,13 @@
 import sys
 import utility as util
 import distance_file_graph_generator as dfg
-import cugraph
+import cugraph, cudf
 import gc
 import pandas as pd
 import cupy as cp
 import dask_cuda
 import dask.distributed
+import time
 
 """"
 def partition_on_gpus(total_time, time_step, weights):
@@ -140,8 +141,10 @@ def all_pairs_shortest_path_async(G, time_stamp):
     return cudf.concat(all_next_hops, ignore_index=True)
 """
 
-def next_hop(df):
-    pred_map = dict(zip(zip(df['Source'], df['vertex']), df['predecessor']))
+SOURCE_COMPUTATION_CHUNKS = 2
+
+def next_hop(df, graph_generator):
+    pred_map = dict(zip(zip(df['Source'], df['Destination']), df['predecessor']))
 
     def find_next_hop(v, source):
         curr = v
@@ -153,9 +156,9 @@ def next_hop(df):
             prev = pred_map.get((source, curr), -1)
         return curr
 
-    df['NextHop'] = [find_next_hop(v, s) for v, s in zip(df['vertex'], df['Source'])]
+    df = df[df['Destination'].apply(graph_generator.graph_builder.is_id_ground_station)].copy()
 
-    df.rename(columns={'vertex': 'Destination'}, inplace=True)
+    df['NextHop'] = [find_next_hop(v, s) for v, s in zip(df['Destination'], df['Source'])]
 
     return df[['TimeStamp', 'Source', 'Destination', 'NextHop']]
 
@@ -172,39 +175,57 @@ def get_total_gpu_memory():
 
 def calculate_batch_size(number_of_nodes):
     mem_size = get_total_gpu_memory()
-    computable_space = mem_size // 2
-    batch_size = computable_space // (24 * number_of_nodes**2) 
+    computable_space = mem_size // (4 * SOURCE_COMPUTATION_CHUNKS)
+    batch_size = computable_space // (24 * number_of_nodes**2)
     return max(1, batch_size)
 
-def shortest_path_async(g_df, src, time_stamp):
+def shortest_path_async(g_df, srcs, time_stamp):
     G = cugraph.Graph()
     G.from_cudf_edgelist(g_df, source='src', destination='dst', edge_attr='weight')
-    sssp_df = cugraph.sssp(G, source=src)
-    sssp_df['Source'] = src
-    sssp_df['TimeStamp'] = time_stamp
+    results = []
 
-    return sssp_df
+    for src in srcs:
+        sssp_df = cugraph.sssp(G, source=src)
+        sssp_df['Source'] = src
+        sssp_df['TimeStamp'] = time_stamp
+        sssp_df.rename(columns={'vertex': 'Destination'}, inplace=True)
+        results.append(sssp_df)
 
-def run_batch_graphs(client, graph_generator, offset, time_step, batch_size, nodes):
-    nodes = graph_generator.graph_builder.to_id(nodes)
-    time_stamps = list(range(offset, offset+batch_size*time_step, time_step))
-    graphs = [graph_generator.get_graph(time_stamp) for time_stamp in time_stamps]
-    graphs_worker = [client.scatter(g, broadcast=True) for g in graphs]
+    return cudf.concat(results, ignore_index=True)
 
-    print(f"graphs ready for {offset} to {offset + (batch_size - 1) * time_step}")
+def split_into_chunks(lst, n):
+    avg_chunk_size = len(lst) // n
+    remainder = len(lst) % n
+    chunks = []
+    start = 0
 
+    for i in range(n):
+        end = start + avg_chunk_size + (1 if i < remainder else 0)
+        chunks.append(lst[start:end])
+        start = end
+
+    return chunks
+
+def run_batch_graphs(start_time, client, graph_generator, offset, time_step, batch_size):
     future_graphs, future_src, future_timestamps = [], [], []
-    for i, g in enumerate(graphs_worker):
-        future_graphs += [g] * len(nodes)
-        future_src += nodes
-        future_timestamps += [time_stamps[i]] * len(nodes)
+    for time_stamp in range(offset, offset+batch_size*time_step, time_step):
+        g, sources = graph_generator.get_graph(time_stamp)
+        sources_chunks = split_into_chunks(sources, SOURCE_COMPUTATION_CHUNKS)
+        future_graphs += [g] * SOURCE_COMPUTATION_CHUNKS
+        future_src += sources_chunks
+        future_timestamps += [time_stamp] * SOURCE_COMPUTATION_CHUNKS
 
+    print(f"graphs ready for {offset} to {offset + (batch_size - 1) * time_step} in {time.time() - start_time} seconds")
+
+    start_gpu_calc = time.time()
     futures = client.map(shortest_path_async, future_graphs, future_src, future_timestamps)
     batch_result = client.gather(futures)
+    print(f"GPU calculations done in {time.time() - start_gpu_calc} seconds")
+
     gpu_result = []
     for df in batch_result:
         cpu_df = df.to_pandas()
-        gpu_result.append(next_hop(cpu_df))
+        gpu_result.append(next_hop(cpu_df, graph_generator))
         del df
     
     cpu_results = pd.concat(gpu_result, ignore_index=True)
@@ -215,13 +236,10 @@ def run_batch_graphs(client, graph_generator, offset, time_step, batch_size, nod
     cpu_results['NextHop'] = cpu_results['NextHop'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
     cpu_results['Source'] = cpu_results['Source'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
     cpu_results['Destination'] = cpu_results['Destination'].apply(lambda x: graph_generator.graph_builder.id_to_node[int(x)])
-    cpu_results = cpu_results[cpu_results.apply(
-        lambda row: graph_generator.is_ground_station(row['Destination']),
-        axis=1
-    )]
+    
     return cpu_results
 
-def distribute_graphs_on_gpus(total_time, time_step, graph_generator, nodes):
+def distribute_graphs_on_gpus(total_time, time_step, graph_generator):
     cluster = dask_cuda.LocalCUDACluster()
     client = dask.distributed.Client(cluster)
     print(client)
@@ -229,17 +247,17 @@ def distribute_graphs_on_gpus(total_time, time_step, graph_generator, nodes):
     max_batch_size = calculate_batch_size(graph_generator.number_of_nodes)
     results = []
     for offset in range(0, total_time + time_step, max_batch_size * time_step):
+        start_time = time.time()
         batch_size = min(max_batch_size, (total_time - offset) // time_step + 1)
-        results.append(run_batch_graphs(client, graph_generator, offset, time_step, batch_size, nodes))
-        print(f"Calculated forwarding table for batch timestamps {offset} to {offset + (batch_size - 1) * time_step}...")
-    
+        results.append(run_batch_graphs(start_time, client, graph_generator, offset, time_step, batch_size))
+        print(f"Calculated forwarding table for batch timestamps {offset} to {offset + (batch_size - 1) * time_step} in {time.time() - start_time} seconds")
+
     client.close()
     cluster.close()
     return pd.concat(results, ignore_index=True)
     
-
-def calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator, nodes):
-    result_df = distribute_graphs_on_gpus(total_time, time_step, graph_generator, nodes)
+def calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator):
+    result_df = distribute_graphs_on_gpus(total_time, time_step, graph_generator)
     for source, group_df in result_df.groupby('Source'):
         for row in group_df.itertuples(index=False):
             node_writers[source].writerow((row.TimeStamp, row.Destination, row.NextHop))
@@ -249,26 +267,26 @@ def calculate_shortest_paths(node_writers, node_files, total_time, time_step, gr
 def dijkstra_shortest_path_algorithm(distance_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraForwardingTable", nodes)
-    graph_generator = dfg.GraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes))
-    calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator, nodes)
+    graph_generator = dfg.GraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes, constellation_name), len(nodes))
+    calculate_shortest_paths(node_writers, node_files, total_time, time_step, graph_generator)
 
 def dijkstra_grid_plus_shortest_path_algorithm(distance_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, number_of_orbits, number_of_satellites_per_orbit = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraGridPlusForwardingTable", nodes)
-    grid_plus_graph_generator = dfg.GridPlusGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes), number_of_orbits, number_of_satellites_per_orbit)
-    calculate_shortest_paths(node_writers, node_files, total_time, time_step, grid_plus_graph_generator, nodes)
+    grid_plus_graph_generator = dfg.GridPlusGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes, constellation_name), len(nodes), number_of_orbits, number_of_satellites_per_orbit)
+    calculate_shortest_paths(node_writers, node_files, total_time, time_step, grid_plus_graph_generator)
 
 def dijkstra_static_topology_shortest_path_algorithm(distance_file_name, topology_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraStaticForwardingTable", nodes)
-    static_topology_graph_generator = dfg.StaticTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes), len(nodes),topology_file_name)
-    calculate_shortest_paths(node_writers, node_files, total_time, time_step, static_topology_graph_generator, nodes)
+    static_topology_graph_generator = dfg.StaticTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes, constellation_name), len(nodes), topology_file_name)
+    calculate_shortest_paths(node_writers, node_files, total_time, time_step, static_topology_graph_generator)
 
 def dijkstra_dynamic_topology_shortest_path_algorithm(distance_file_name, topology_file_name):
     distance_csv_dataframe, constellation_name, time_step, total_time, simulation_details, nodes, _, _ = util.read_distance_file(distance_file_name)
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, "DijkstraDynamicForwardingTable", nodes)
-    dynamic_topology_graph_generator = dfg.DynamicTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(), len(nodes),topology_file_name)
-    calculate_shortest_paths(node_writers, node_files, total_time, time_step, dynamic_topology_graph_generator, nodes)
+    dynamic_topology_graph_generator = dfg.DynamicTopologyGraphGenerator(distance_csv_dataframe, constellation_name, dfg.CUGraphBuilder(nodes, constellation_name), len(nodes), topology_file_name)
+    calculate_shortest_paths(node_writers, node_files, total_time, time_step, dynamic_topology_graph_generator)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
