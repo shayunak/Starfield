@@ -296,9 +296,9 @@ if __name__ == "__main__":
         dijkstra_shortest_path_algorithm(sys.argv[2])
     elif sys.argv[1] == "--dijkstra_grid_plus" and len(sys.argv) == 3:
         dijkstra_grid_plus_shortest_path_algorithm(sys.argv[2])
-    elif sys.argv[1] == "--dijkstra_static_topology" and len(sys.argv) == 4:
+    elif sys.argv[1] == "--dijkstra_static" and len(sys.argv) == 4:
         dijkstra_static_topology_shortest_path_algorithm(sys.argv[2], sys.argv[3])
-    elif sys.argv[1] == "--dijkstra_dynamic_topology" and len(sys.argv) == 4:
+    elif sys.argv[1] == "--dijkstra_dynamic" and len(sys.argv) == 4:
         dijkstra_dynamic_topology_shortest_path_algorithm(sys.argv[2], sys.argv[3])
     else:
         print("Invalid Option or Missing Arguments!")

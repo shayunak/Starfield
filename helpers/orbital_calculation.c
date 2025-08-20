@@ -54,7 +54,7 @@ double calculate_sinal_coefficient(double inclination_cosinus, double inclinatio
 
 void analyze_orbit(orbital_calculations* orbital_calc, int i, int* in_range_ids, orbit_calc* in_range_orbits, int* count, double orbital_ascension, anomaly_elements anomaly_el)
 {
-    double ascension_calculated = fmod(orbital_calc->ascension_step * (double)i + orbital_calc->min_ascension_angle + 2.0 * M_PI, 2.0 * M_PI);
+    double ascension_calculated = fmod(orbital_calc->ascension_step * (double)i + orbital_calc->min_ascension_angle + 4.0 * M_PI, 2.0 * M_PI);
     if (is_orbit_angle_valid(orbital_calc->min_ascension_angle, orbital_calc->max_ascension_angle, ascension_calculated)) {
         double ascension_diff = orbital_ascension - ascension_calculated;
         int real_id = (int)round((ascension_calculated - orbital_calc->min_ascension_angle) / orbital_calc->ascension_step);

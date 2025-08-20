@@ -130,7 +130,7 @@ func (orbitalCalc *OrbitalCalculations) calculateSinalCoefficient(anomalyEl Anom
 }
 
 func (orbitalCalc *OrbitalCalculations) analyzeOrbit(i int, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements) {
-	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(i)+orbitalCalc.MinAscensionAngle+2*math.Pi, 2*math.Pi)
+	ascensionCalculated := math.Mod(orbitalCalc.AscensionStep*float64(i)+orbitalCalc.MinAscensionAngle+4*math.Pi, 2*math.Pi)
 	if orbitalCalc.isOrbitAngleValid(ascensionCalculated) {
 		ascensionDiff := orbitalAscension - ascensionCalculated
 		realId := int(math.Round((ascensionCalculated - orbitalCalc.MinAscensionAngle) / orbitalCalc.AscensionStep))
