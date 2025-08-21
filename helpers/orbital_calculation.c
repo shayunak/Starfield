@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 int is_orbit_angle_valid(double min_ascension_angle, double max_ascension_angle, double angle) {
-    return angle >= min_ascension_angle && angle <= max_ascension_angle;
+    return angle >= min_ascension_angle && angle < max_ascension_angle;
 }
 
 double convert_orbit_id_to_ascension(double min_ascension_angle, double ascension_step, int orbit_id) {

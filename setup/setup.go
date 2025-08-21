@@ -25,7 +25,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 	earthMotionRadiansPerSecond := config.OrbitConfig.EarthRotationPeriod * ((2.0 * math.Pi) / (24.0 * 60.0 * 60.0))
 	ascensionStep := 0.0
 	if numberOfOrbits > 1 {
-		ascensionStep = (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits-1)
+		ascensionStep = (maxAscensionAngle - minAscensionAngle) / float64(numberOfOrbits)
 	}
 
 	orbitalCalc := &helpers.OrbitalCalculations{
