@@ -24,7 +24,7 @@ def generate_intra_orbit_isls(graph, orbit, number_of_satellites_per_orbit, cons
     for id in range(number_of_satellites_per_orbit):
         satellite_id = f"{constellation_name}-{orbit}-{id}"
         possible_neighbors = ([neighbor for neighbor in list(distance_graph.neighbors(satellite_id)) 
-                      if in_same_orbit(satellite_id, neighbor) and  graph.degree(neighbor) < number_of_isls])
+                      if in_same_orbit(satellite_id, neighbor) and graph.degree(neighbor) < number_of_isls and not graph.has_edge(satellite_id, neighbor)])
         
         while graph.degree(satellite_id) < number_of_isls and len(possible_neighbors) > 0:
             selected_neighbor = random.sample(possible_neighbors, 1)
