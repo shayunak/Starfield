@@ -37,16 +37,18 @@ type SatelliteConfig struct {
 }
 
 type Config struct {
-	ConsellationName string          `json:"name"`
-	UseGPU           bool            `json:"use_gpu"` // if true, the simulator will use GPU for calculations
-	OrbitConfig      OrbitConfig     `json:"orbit_config"`
-	SatelliteConfig  SatelliteConfig `json:"satellite_config"`
+	ConsellationName     string          `json:"name"`
+	UseGPU               bool            `json:"use_gpu"` // if true, the simulator will use GPU for calculations
+	CoordinationInterval float64         `json:"coordination_interval"`
+	OrbitConfig          OrbitConfig     `json:"orbit_config"`
+	SatelliteConfig      SatelliteConfig `json:"satellite_config"`
 }
 
 type IConfig interface {
 	toString() string
 }
 
+// TODO: Fix toString() functions
 func (config Config) toString() string {
 	return fmt.Sprintf("{ \n orbit_config: %s, \n satellite_config: %s \n}",
 		config.OrbitConfig.toString(), config.SatelliteConfig.toString())

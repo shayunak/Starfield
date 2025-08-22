@@ -12,6 +12,7 @@ type Coordinator struct {
 	LoggerChannel         *chan float64
 	TimeStamp             float64
 	NextTimeStamp         float64
+	CoordinationInterval  float64
 	NumberOfAcksPerRound  int
 	TotalSimulationTime   float64 // in milliseconds
 }
@@ -82,7 +83,7 @@ func (coordinator *Coordinator) GetNumberOfAcksPerRound() int {
 
 func (coordinator *Coordinator) InitiateNewRound() {
 	coordinator.NumberOfAcksPerRound = 0
-	coordinator.TimeStamp = coordinator.NextTimeStamp
+	coordinator.TimeStamp = coordinator.NextTimeStamp + coordinator.CoordinationInterval
 	for _, channel := range *coordinator.ProgressTokenChannels {
 		*channel <- ProgressToken{TimeStamp: coordinator.TimeStamp}
 	}

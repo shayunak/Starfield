@@ -1,6 +1,7 @@
 {
     "name": "Starlink",
     "use_gpu": true,
+    "coordination_interval": 1.0,
     "orbit_config": {
         "earth_radius": 6378135.0,
         "earth_rotation_period": 1.0,

@@ -348,7 +348,8 @@ func (satellite *Satellite) SendPendingRequests() {
 }
 
 func (satellite *Satellite) ReceiveFromInterfaces() {
-	for indx, inface := range satellite.ISLInterfaces {
+	aliveInterfaces := make([]connections.INetworkInterface, 0)
+	for _, inface := range satellite.ISLInterfaces {
 		if inface.GetDeviceConnectedTo() != "" {
 			if inface.HasReceiveChannel() {
 				receivedEvents := inface.Receive()
@@ -358,10 +359,10 @@ func (satellite *Satellite) ReceiveFromInterfaces() {
 					satellite.logEvent(int(event.TimeStamp), SIMULATION_EVENT_RECEIVED, event.Data, inface.GetDeviceConnectedTo(), satellite.Name)
 				}
 			}
-		} else {
-			satellite.ISLInterfaces = append(satellite.ISLInterfaces[:indx], satellite.ISLInterfaces[indx+1:]...)
+			aliveInterfaces = append(aliveInterfaces, inface)
 		}
 	}
+	satellite.ISLInterfaces = aliveInterfaces
 	for gsName, inface := range satellite.GSLInterfaces {
 		if inface.GetDeviceConnectedTo() != "" {
 			if inface.HasReceiveChannel() {
@@ -466,15 +467,16 @@ func (satellite *Satellite) getReceiveGSL() ([]*chan connections.Packet, []strin
 
 func (satellite *Satellite) getReceiveISL() []*chan connections.Packet {
 	channels := make([]*chan connections.Packet, 0)
-	for indx, inface := range satellite.ISLInterfaces {
+	aliveInterfaces := make([]connections.INetworkInterface, 0)
+	for _, inface := range satellite.ISLInterfaces {
 		if inface.GetDeviceConnectedTo() != "" {
 			if inface.HasReceiveChannel() {
 				channels = append(channels, inface.GetReceiveChannel())
 			}
-		} else {
-			satellite.ISLInterfaces = append(satellite.ISLInterfaces[:indx], satellite.ISLInterfaces[indx+1:]...)
+			aliveInterfaces = append(aliveInterfaces, inface)
 		}
 	}
+	satellite.ISLInterfaces = aliveInterfaces
 	return channels
 }
 

@@ -273,8 +273,8 @@ func (logger *Logger) logSimulationSummary() {
 		}
 	}
 
-	fileName := fmt.Sprintf("./generated/SimulationSummary#%s#%s#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
-		logger.ConsellationName, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
+	fileName := fmt.Sprintf("./generated/SimulationSummary#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
 	log.Default().Println("Writing simulation summary to ", fileName)
 	outputFile, err := os.Create(fileName)

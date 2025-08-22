@@ -95,13 +95,14 @@ func initLinker(linker *actors.ILinker) {
 	}
 }
 
-func initCoordinator(coordinator *actors.ICoordinator, loggerChannel *chan float64, totalSimulationTime int) {
+func initCoordinator(coordinator *actors.ICoordinator, loggerChannel *chan float64, coordinationInterval float64, totalSimulationTime int) {
 	*coordinator = &actors.Coordinator{
 		ProgressTokenChannels: nil,
 		LoggerChannel:         loggerChannel,
 		TimeStamp:             0,
 		NextTimeStamp:         0,
 		NumberOfAcksPerRound:  0,
+		CoordinationInterval:  coordinationInterval,
 		TotalSimulationTime:   float64(totalSimulationTime) * 1000.0, // in milliseconds
 	}
 }
@@ -176,7 +177,7 @@ func SetupForwardingSimulationGridPlus(configFileName string, groundStationFileN
 	// initializing the Logger and  the Linker
 	coordinatorChannel := initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
 	initLinker(&linker)
-	initCoordinator(&coordinator, coordinatorChannel, totalSimulationTime)
+	initCoordinator(&coordinator, coordinatorChannel, config.CoordinationInterval, totalSimulationTime)
 
 	// bringing up the ISL topology
 	topologyPairs := connections.GenerateGridPlus(config.OrbitConfig.NumberOfOrbits, config.OrbitConfig.NumberOfSatellitesPerOrbit, config.ConsellationName)
@@ -241,7 +242,7 @@ func SetupForwardingSimulation(configFileName string, groundStationFileName stri
 	// initializing the Logger and the Linker
 	coordinatorChannel := initLogger(&logger, config, timeStep, totalSimulationTime, totalNumberOfPackets)
 	initLinker(&linker)
-	initCoordinator(&coordinator, coordinatorChannel, totalSimulationTime)
+	initCoordinator(&coordinator, coordinatorChannel, config.CoordinationInterval, totalSimulationTime)
 
 	// bringing up the ISL topology
 	topologyPairs := GenerateISLTopology(ISLTopologyFileName)
