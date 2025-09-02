@@ -53,7 +53,7 @@ def pairwise_stretch_factor(gs_df: pd.DataFrame, overall: pd.DataFrame) -> pd.Se
             return pd.NA
         distance = geodesic(p1, p2).kilometers
         light_speed_latency = distance / SPEED_OF_LIGHT_VAC
-        return light_speed_latency / row["Latency_ms"] if row["Latency_ms"] else pd.NA
+        return row["Latency_ms"] / light_speed_latency if row["Latency_ms"] else pd.NA
     
     overall["Stretch_factor"] = overall.apply(stretch_factor, axis=1)
 
