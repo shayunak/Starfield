@@ -39,9 +39,12 @@ type IGroundStationCalculation interface {
 	GetAnomalyCalculations() IAnomalyCalculation
 	FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64)
 	FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]float64
+	FindSatellite(satelliteName string, headPointAnomalyEl AnomalyElements, headPointAscension float64, timeStamp float64) (float64, bool)
 	UpdatePosition(prevAscension float64, timeStep float64) float64
 	SetGroundStationSpecs(gsSpecs *GroundStationSpecs)
+	CalculateCoveringGSDistance(gsName string, timeStamp float64, anomaly float64, orbit IOrbit) (float64, bool)
 	GetCoveringGroundStations(timeStamp float64, anomaly float64, orbit IOrbit) map[string]float64
+	calculateGSDistance(headPointAnomalyEl AnomalyElements, headPointAscension float64, anomaly float64, ascension float64) float64
 	coveringGroundStation(headPointAscension float64, headPointAnomalyEl AnomalyElements, anomaly float64, timeStamp float64,
 		earthRotationMotion float64, earthOrbitRatio float64, ascension float64, altitude float64, distances *[]float64, gsInRange *[]string, gsName string)
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
@@ -55,6 +58,30 @@ func (gsc *GroundStationCalculation) SetGroundStationSpecs(gsSpecs *GroundStatio
 
 func (gsc *GroundStationCalculation) GetAnomalyCalculations() IAnomalyCalculation {
 	return gsc.AnomalyCalculations
+}
+
+func (gsc *GroundStationCalculation) CalculateCoveringGSDistance(gsName string, timeStamp float64, anomaly float64, orbit IOrbit) (float64, bool) {
+	gsSpec := (*gsc.GroundStations)[gsName]
+	gsAscension := gsc.UpdatePosition(gsSpec.HeadPointAscension, timeStamp)
+	satAnomaly, _ := gsc.GetAnomalyCalculations().UpdatePosition(anomaly, timeStamp)
+	distance := gsc.calculateGSDistance(gsSpec.HeadPointAnomalyEl, gsAscension, satAnomaly, orbit.GetAscension())
+	if distance < gsc.GroundStationsDistanceLimit {
+		return distance, true
+	}
+	return distance, false
+}
+
+func (gsc *GroundStationCalculation) FindSatellite(satelliteName string, headPointAnomalyEl AnomalyElements, headPointAscension float64, timeStamp float64) (float64, bool) {
+	gsAscension := gsc.UpdatePosition(headPointAscension, timeStamp)
+	satelliteOrbit, satelliteNum := GetOrbitAndSatelliteId(satelliteName)
+	satellitePhase := gsc.GetAnomalyCalculations().CalculatePhase(satelliteNum, satelliteOrbit)
+	satAnomaly, _ := gsc.GetAnomalyCalculations().UpdatePosition(satellitePhase, timeStamp)
+	satAscension := gsc.GetAnomalyCalculations().GetOrbitalCalculations().ConvertOrbitIdToAscension(satelliteOrbit)
+	distance := gsc.calculateGSDistance(headPointAnomalyEl, gsAscension, satAnomaly, satAscension)
+	if distance < gsc.GroundStationsDistanceLimit {
+		return distance, true
+	}
+	return distance, false
 }
 
 func (gsc *GroundStationCalculation) initGroundStationCalcC() {

@@ -28,15 +28,12 @@ func (gsl *GSL) UpdateDistance(ownerId string, connectedId string, timeStamp flo
 	var updatedDistance float64
 	var isLinkInRange bool
 	if gsl.GeometricSpec.Orbit != nil {
-		updatedAnomaly, _ := gsl.GeoCalculation.GetAnomalyCalculations().UpdatePosition(gsl.GeometricSpec.Anomaly, timeStamp)
-		updatedDistance, isLinkInRange = gsl.GeoCalculation.GetCoveringGroundStations(timeStamp, updatedAnomaly, gsl.GeometricSpec.Orbit)[connectedId]
+		updatedDistance, isLinkInRange = gsl.GeoCalculation.CalculateCoveringGSDistance(connectedId, timeStamp, gsl.GeometricSpec.Anomaly, gsl.GeometricSpec.Orbit)
 		if !isLinkInRange {
 			return true
 		}
 	} else {
-		updatedAscension := gsl.GeoCalculation.UpdatePosition(gsl.GeometricSpec.HeadPointAscension, timeStamp)
-		satellitesInRange := gsl.GeoCalculation.FindSatellitesInRange(ownerId, updatedAscension, gsl.GeometricSpec.HeadPointAnomalyEl, timeStamp)
-		updatedDistance, isLinkInRange = satellitesInRange[connectedId]
+		updatedDistance, isLinkInRange = gsl.GeoCalculation.FindSatellite(connectedId, gsl.GeometricSpec.HeadPointAnomalyEl, gsl.GeometricSpec.HeadPointAscension, timeStamp)
 		if !isLinkInRange {
 			return true
 		}

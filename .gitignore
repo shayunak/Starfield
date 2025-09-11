@@ -26,6 +26,9 @@ go.work
 *.pyo
 shortest_path_forwarding/__pycache__/*
 
+#Input Simulation
+input/*
+
 #Generate Simulation
 generated/*
 forwarding_table/*

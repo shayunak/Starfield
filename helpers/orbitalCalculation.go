@@ -41,11 +41,11 @@ type IOrbitalCalculations interface {
 	GetMinAscensionAngle() float64
 	GetMaxAscensionAngle() float64
 	GetNumberOfOrbits() int
+	ConvertOrbitIdToAscension(orbitId int) float64
 	FindOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc)
 	findOrbitsInRange(lengthLimitRatio float64, anomalyEl AnomalyElements, orbitalAscension float64, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc)
 	calculateCosinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
 	calculateSinalCoefficient(anomalyEl AnomalyElements, ascensionDiff float64) float64
-	convertOrbitIdToAscension(orbitId int) float64
 	isOrbitAngleValid(angle float64) bool
 	analyzeOrbit(i int, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements)
 	analyzeOrbitRange(orbitRange Range, inRangeIds *[]int, inRangeOrbits *[]OrbitCalc, orbitalAscension float64, anomalyEl AnomalyElements)
@@ -82,7 +82,7 @@ func (orbitalCalc *OrbitalCalculations) isOrbitAngleValid(angle float64) bool {
 	return angle >= orbitalCalc.MinAscensionAngle && angle < orbitalCalc.MaxAscensionAngle
 }
 
-func (orbitalCalc *OrbitalCalculations) convertOrbitIdToAscension(orbitId int) float64 {
+func (orbitalCalc *OrbitalCalculations) ConvertOrbitIdToAscension(orbitId int) float64 {
 	return float64(orbitId)*orbitalCalc.AscensionStep + orbitalCalc.MinAscensionAngle
 }
 

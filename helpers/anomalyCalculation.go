@@ -24,13 +24,13 @@ type IAnomalyCalculation interface {
 	UpdatePosition(prevAnomaly float64, timeStep float64) (float64, AnomalyElements)
 	CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int, secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64
 	CalculateDistance(orbitCalc OrbitCalc, otherSatelliteAnomaly float64) float64
+	CalculatePhase(satelliteId int, orbitId int) float64
 	GetOrbitalCalculations() IOrbitalCalculations
 	GetLengthLimitRatio() float64
 	GetMaxDistance() float64
 	GetRadius() float64
 	findDistanceforSatelliteId(i int, baseId string, orbit int, timeStamp float64, orbitCalc OrbitCalc, initialPhaseShift float64, satelliteIds *[]string, satelliteDistances *[]float64)
 	calculateSatelliteIdInRange(orbit int, orbitCalc OrbitCalc, baseId string, lengthLimitRatio float64, timeStamp float64, satelliteIds *[]string, satelliteDistances *[]float64)
-	calculatePhase(satelliteId int, orbitId int) float64
 	makeAnomalyCalculationsC(constellationName *C.char) C.anomaly_calculations
 }
 
@@ -175,7 +175,7 @@ func (anomalyCalc *AnomalyCalculations) UpdatePosition(prevAnomaly float64, time
 	}
 }
 
-func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId int) float64 {
+func (anomalyCalc *AnomalyCalculations) CalculatePhase(satelliteId int, orbitId int) float64 {
 	phase := float64(satelliteId) * anomalyCalc.AnomalyStep
 	if anomalyCalc.PhaseDiffEnabled && orbitId%2 == 1 {
 		phase += anomalyCalc.AnomalyStep / 2.0
@@ -188,8 +188,8 @@ func (anomalyCalc *AnomalyCalculations) calculatePhase(satelliteId int, orbitId 
 func (anomalyCalc *AnomalyCalculations) CalculateDistanceBySatelliteId(firstSatelliteId int, firstSatelliteOrbitId int,
 	secondSatelliteId int, secondSatelliteOrbitId int, timeStamp float64) float64 {
 
-	firstPhase := anomalyCalc.calculatePhase(firstSatelliteId, firstSatelliteOrbitId)
-	secondPhase := anomalyCalc.calculatePhase(secondSatelliteId, secondSatelliteOrbitId)
+	firstPhase := anomalyCalc.CalculatePhase(firstSatelliteId, firstSatelliteOrbitId)
+	secondPhase := anomalyCalc.CalculatePhase(secondSatelliteId, secondSatelliteOrbitId)
 	phaseDiff := firstPhase - secondPhase
 	ascensionDiff := float64(firstSatelliteOrbitId-secondSatelliteOrbitId) * anomalyCalc.OrbitalCalculations.GetAscensionStep()
 	ascensionDiffSinus := math.Sin(ascensionDiff)
