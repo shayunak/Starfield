@@ -53,7 +53,7 @@ def close_files(node_files):
 
 def printHelp():
     print("shortest_path.py --help")
-    print("shortest_path.py --dijkstra [distance file]")
-    print("shortest_path.py --dijkstra_grid_plus [distance file]")
-    print("shortest_path.py --dijkstra_static [distance file] [topology_file_static]")
-    print("shortest_path.py --dijkstra_dynamic [distance file] [topology_file_dynamic]")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra [distance file]")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_grid_plus [distance file]")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_static [distance file] [topology_file_static]")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_dynamic [distance file] [topology_file_dynamic]")

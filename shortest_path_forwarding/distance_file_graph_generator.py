@@ -34,49 +34,47 @@ class NXGraphBuilder:
         g.add_weighted_edges_from(edges)
         return g
 
-class GraphGenerator:
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes):
+class GraphLinkFilter:
+    def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
         self.distances_df = distances_df
+        self.graph_generator = graph_generator
         self.constellation_name = constellation_name
         self.graph_builder = graph_builder
         self.number_of_nodes = number_of_nodes
 
-    def check_sanity(self, time_stamp_data, time_stamp):
-        pass
+    def set_graph_generator(self, graph_generator):
+        self.graph_generator = graph_generator
+
+    def set_graph_builder(self, graph_builder):
+        self.graph_builder = graph_builder
 
     def is_satellite_id(self, satellite_id):
         splitted_name = satellite_id.split("-")
         if len(splitted_name) == 3 and splitted_name[0] == self.constellation_name:
             return True
         return False
-
-    def check_isl_edge(self, first_satellite_name, second_satellite_name, time_stamp):
-        return True
-
+    
+    def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
+        pass
+    
     def get_graph(self, time_stamp):
         timestamp_data = self.distances_df.loc[self.distances_df['TimeStamp(ms)'] == time_stamp]
-        self.check_sanity(timestamp_data, time_stamp)
 
         timestamp_data = timestamp_data.loc[
             timestamp_data['FirstDeviceId'] != timestamp_data['SecondDeviceId']
-        ]
+        ] # remove self-loops
 
         first_is_sat = timestamp_data['FirstDeviceId'].apply(self.is_satellite_id)
         second_is_sat = timestamp_data['SecondDeviceId'].apply(self.is_satellite_id)
 
         both_sat_mask = first_is_sat & second_is_sat
-        sat_pairs = timestamp_data.loc[both_sat_mask]
+        isl_pairs = timestamp_data.loc[both_sat_mask]
 
-        if not sat_pairs.empty:
-            isl_mask = [
-                self.check_isl_edge(f, s, time_stamp)
-                for f, s in zip(sat_pairs['FirstDeviceId'], sat_pairs['SecondDeviceId'])
-            ]
-            sat_pairs = sat_pairs.loc[isl_mask]
+        gsl_pairs = timestamp_data.loc[~both_sat_mask]
 
-        non_sat_pairs = timestamp_data.loc[~both_sat_mask]
+        gsl_pairs, isl_pairs = self.generate_graph(time_stamp, gsl_pairs, isl_pairs)
 
-        final_edges = pd.concat([sat_pairs, non_sat_pairs], ignore_index=True)
+        final_edges = pd.concat([isl_pairs, gsl_pairs], ignore_index=True)
 
         src = final_edges['FirstDeviceId'].tolist()
         dst = final_edges['SecondDeviceId'].tolist()
@@ -84,9 +82,52 @@ class GraphGenerator:
 
         return self.graph_builder.build_graph(src, dst, weight)
 
+class OnlyISLLinkFilter(GraphLinkFilter):
+    def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
+        super().__init__(distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes)
+
+    def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
+        idx = gsl_pairs.groupby('FirstDeviceId')['Distance(m)'].idxmin()
+        gsl_min = gsl_pairs.loc[idx].reset_index(drop=True)
+
+        return gsl_min, self.graph_generator.get_graph(time_stamp, isl_pairs)
+
+class OnlyGSLLinkFilter(GraphLinkFilter):
+    def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
+        super().__init__(distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes)
+
+    def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
+        return gsl_pairs, pd.DataFrame(columns=isl_pairs.columns)
+
+class ISLAndGSLLinkFilter(GraphLinkFilter):
+    def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
+        super().__init__(distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes)
+
+    def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
+        return gsl_pairs, self.graph_generator.get_graph(time_stamp, isl_pairs)
+
+class GraphGenerator:
+    def check_sanity(self, time_stamp_data, time_stamp):
+        pass
+
+    def check_isl_edge(self, first_satellite_name, second_satellite_name, time_stamp):
+        return True
+
+    def get_graph(self, time_stamp, isl_pairs):
+        self.check_sanity(isl_pairs, time_stamp)
+
+        if not isl_pairs.empty:
+            isl_mask = [
+                self.check_isl_edge(f, s, time_stamp)
+                for f, s in zip(isl_pairs['FirstDeviceId'], isl_pairs['SecondDeviceId'])
+            ]
+            isl_pairs = isl_pairs.loc[isl_mask]
+
+        return isl_pairs
+
 class GridPlusGraphGenerator(GraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, number_of_orbits, number_of_satellites_per_orbit):
-        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes)
+    def __init__(self, number_of_orbits, number_of_satellites_per_orbit):
+        super().__init__()
         self.number_of_orbits = number_of_orbits
         self.number_of_satellites_per_orbit = number_of_satellites_per_orbit
 
@@ -113,13 +154,13 @@ class GridPlusGraphGenerator(GraphGenerator):
         return False
     
 class TopologyGraphGenerator(GraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes)
+    def __init__(self, topology_file):
+        super().__init__()
         self.topology = self.load_topology(topology_file)
 
 class StaticTopologyGraphGenerator(TopologyGraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes, topology_file)
+    def __init__(self, topology_file):
+        super().__init__(topology_file)
 
     def load_topology(self, topology_file):
         topology_dataframe = pd.read_csv(f"./input/{topology_file}")
@@ -134,8 +175,8 @@ class StaticTopologyGraphGenerator(TopologyGraphGenerator):
         return (first_satellite_name, second_satellite_name) in self.topology
         
 class DynamicTopologyGraphGenerator(TopologyGraphGenerator):
-    def __init__(self, distances_df, constellation_name, graph_builder, number_of_nodes, topology_file):
-        super().__init__(distances_df, constellation_name, graph_builder, number_of_nodes, topology_file)
+    def __init__(self, topology_file):
+        super().__init__(topology_file)
 
     def load_topology(self, topology_file):
         topology_dataframe = pd.read_csv(f"./input/{topology_file}")
