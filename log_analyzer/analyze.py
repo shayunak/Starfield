@@ -10,7 +10,7 @@ SPEED_OF_LIGHT_VAC = 299.792458  # km/ms
 # Command line help
 def printHelp():
     print("analyze.py --help")
-    print("analyze.py [simulation.csv] [groundstation.csv]")
+    print("analyze.py [simulation_summary_file.csv] [ground_stations_file.csv]")
 
 # Calculate lantnecy
 def packet_latency(group: pd.DataFrame) -> pd.Series:

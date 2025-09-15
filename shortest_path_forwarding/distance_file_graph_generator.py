@@ -87,6 +87,7 @@ class OnlyISLLinkFilter(GraphLinkFilter):
         super().__init__(distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes)
 
     def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
+        gsl_pairs = gsl_pairs[~gsl_pairs["FirstDeviceId"].apply(self.is_satellite_id)]
         idx = gsl_pairs.groupby('FirstDeviceId')['Distance(m)'].idxmin()
         gsl_min = gsl_pairs.loc[idx].reset_index(drop=True)
 
