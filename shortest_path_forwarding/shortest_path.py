@@ -4,6 +4,31 @@ import distance_file_graph_generator as dfg
 import networkx as nx
 import utility as util
 import time
+import pandas as pd
+
+def calculate_isl_only_shortest_path_hops(csv_writers, time_stamp, distance_graph, graph_generator):
+    all_pairs = dict(nx.all_pairs_dijkstra(distance_graph, weight='weight'))
+    sat_source = {'SAT': [], 'GS': [], 'Min_Distance': []}
+    gsl_pairs = graph_generator.gsl_gs_source_pairs
+    for source, (distances, paths) in all_pairs.items():
+        if graph_generator.is_satellite_id(source):
+            for dest, path in paths.items():
+                if source != dest and not graph_generator.is_satellite_id(dest):
+                    csv_writers[source].writerow((time_stamp, dest, path[1]))
+                    sat_source['SAT'].append(source)
+                    sat_source['GS'].append(dest)
+                    sat_source['Min_Distance'].append(distances[dest])
+
+    sat_df = pd.DataFrame(sat_source)
+    all_gs_paths = pd.merge(gsl_pairs, sat_df, left_on="SecondDeviceId", right_on="SAT")
+    all_gs_paths['TotalDistance'] = all_gs_paths['Distance(m)'] + all_gs_paths['Min_Distance']
+    idx = all_gs_paths.groupby(["FirstDeviceId", "GS"])['TotalDistance'].idxmin()
+    min_gs_paths = all_gs_paths.loc[idx].reset_index(drop=True)
+    for row in min_gs_paths.itertuples(index=False):
+        if row.FirstDeviceId != row.GS:
+            csv_writers[row.FirstDeviceId].writerow((time_stamp, row.GS, row.SAT))
+    
+
 
 def calculate_shortest_path_hops(csv_writers, timestamp, distance_graph, graph_generator):
     paths = nx.all_pairs_dijkstra_path(distance_graph)
@@ -12,11 +37,11 @@ def calculate_shortest_path_hops(csv_writers, timestamp, distance_graph, graph_g
             if other_node != node and not graph_generator.is_satellite_id(other_node):
                 csv_writers[node].writerow((timestamp, other_node, path[1]))
 
-def calculate_shortest_paths(node_writers, total_time, time_step, graph_generator):
+def calculate_shortest_paths(shortest_path, node_writers, total_time, time_step, graph_generator):
     for time_stamp in range(0, total_time + 1, time_step):
         start_time = time.time()
         graph = graph_generator.get_graph(time_stamp)
-        calculate_shortest_path_hops(node_writers, time_stamp, graph, graph_generator)
+        shortest_path(node_writers, time_stamp, graph, graph_generator)
         print(f"Calculated forwarding table for timestamp {time_stamp} in {time.time() - start_time} seconds")
 
 if __name__ == "__main__":
@@ -43,6 +68,7 @@ if __name__ == "__main__":
     
     folder_name = ""
     graph_builder = dfg.NXGraphBuilder()
+    shortest_path_algo = calculate_shortest_path_hops
     number_of_nodes = len(nodes)
     graph_generator = None
     link_filter_graph_generator = None
@@ -65,6 +91,8 @@ if __name__ == "__main__":
         exit(1)
 
     if sys.argv[1] == "--isl":
+        graph_builder = dfg.NXDirectedGraphBuilder()
+        shortest_path_algo = calculate_isl_only_shortest_path_hops
         link_filter_graph_generator = dfg.OnlyISLLinkFilter(distance_csv_dataframe, constellation_name, graph_builder, graph_generator, number_of_nodes)
         folder_name += "(ISL_Only)"
     elif sys.argv[1] == "--gsl":
@@ -79,7 +107,7 @@ if __name__ == "__main__":
         exit(1)
 
     node_files, node_writers = util.forwarding_folder_csv_file(simulation_details, folder_name, nodes)
-    calculate_shortest_paths(node_writers, total_time, time_step, link_filter_graph_generator)
+    calculate_shortest_paths(shortest_path_algo, node_writers, total_time, time_step, link_filter_graph_generator)
     util.close_files(node_files)
     
 

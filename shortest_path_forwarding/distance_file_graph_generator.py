@@ -34,6 +34,13 @@ class NXGraphBuilder:
         g.add_weighted_edges_from(edges)
         return g
 
+class NXDirectedGraphBuilder:
+    def build_graph(self, src, dst, weight):
+        g = nx.DiGraph()
+        edges = list(zip(src, dst, weight))
+        g.add_weighted_edges_from(edges)
+        return g
+
 class GraphLinkFilter:
     def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
         self.distances_df = distances_df
@@ -41,12 +48,6 @@ class GraphLinkFilter:
         self.constellation_name = constellation_name
         self.graph_builder = graph_builder
         self.number_of_nodes = number_of_nodes
-
-    def set_graph_generator(self, graph_generator):
-        self.graph_generator = graph_generator
-
-    def set_graph_builder(self, graph_builder):
-        self.graph_builder = graph_builder
 
     def is_satellite_id(self, satellite_id):
         splitted_name = satellite_id.split("-")
@@ -85,13 +86,13 @@ class GraphLinkFilter:
 class OnlyISLLinkFilter(GraphLinkFilter):
     def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
         super().__init__(distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes)
+        self.gsl_gs_source_pairs = None
 
     def generate_graph(self, time_stamp, gsl_pairs, isl_pairs):
-        gsl_pairs = gsl_pairs[~gsl_pairs["FirstDeviceId"].apply(self.is_satellite_id)]
-        idx = gsl_pairs.groupby('FirstDeviceId')['Distance(m)'].idxmin()
-        gsl_min = gsl_pairs.loc[idx].reset_index(drop=True)
+        gsl_satellite_source_pairs = gsl_pairs[gsl_pairs["FirstDeviceId"].apply(self.is_satellite_id)]
+        self.gsl_gs_source_pairs = gsl_pairs[~gsl_pairs["FirstDeviceId"].apply(self.is_satellite_id)]
 
-        return gsl_min, self.graph_generator.get_graph(time_stamp, isl_pairs)
+        return gsl_satellite_source_pairs, self.graph_generator.get_graph(time_stamp, isl_pairs)
 
 class OnlyGSLLinkFilter(GraphLinkFilter):
     def __init__(self, distances_df, constellation_name, graph_builder, graph_generator, number_of_nodes):
