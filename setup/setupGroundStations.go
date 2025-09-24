@@ -91,6 +91,17 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
+func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {
+	channels := make(actors.DistanceLoggerDeviceChannels, 0)
+	for _, groundStation := range groundStations {
+		channel := make(actors.DistanceLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		groundStation.SetDistanceLoggerChannel(&channel)
+		groundStation.RunDistances()
+	}
+	return channels
+}
+
 func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceChannels,
 	actors.LinkRequestChannels, actors.LinkRequestChannels,
 	actors.ProgressTokenChannels, actors.AckTokenChannels, []string) {
@@ -120,15 +131,4 @@ func startGroundStations(groundStations GroundStationList) (actors.LoggerDeviceC
 		groundStation.Run()
 	}
 	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, ackChannels, groundStationNames
-}
-
-func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {
-	channels := make(actors.DistanceLoggerDeviceChannels, 0)
-	for _, groundStation := range groundStations {
-		channel := make(actors.DistanceLoggerDeviceChannel)
-		channels = append(channels, &channel)
-		groundStation.SetDistanceLoggerChannel(&channel)
-		groundStation.RunDistances()
-	}
-	return channels
 }

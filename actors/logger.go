@@ -15,10 +15,12 @@ import (
 )
 
 type Logger struct {
-	ConsellationName    string
-	TimeStep            int
-	TimeStamp           float64 // in milliseconds
-	TotalSimulationTime float64 // in milliseconds
+	ConsellationName           string
+	TimeStep                   int
+	TimeStamp                  float64 // in milliseconds
+	TotalSimulationTime        float64 // in milliseconds
+	NumberOfOrbits             int
+	NumberOfSatellitesPerOrbit int
 	// Simulation Mode
 	CoordinatorChannel          *chan float64
 	LoggerDeviceChannels        *LoggerDeviceChannels
@@ -26,16 +28,28 @@ type Logger struct {
 	DeviceNames                 []string
 	Events                      helpers.SimulationEntryList
 	// Distances Mode
-	DistancesLoggerChannels    *DistanceLoggerDeviceChannels
-	DistanceEntries            helpers.DistanceEntryList
-	NumberOfOrbits             int
-	NumberOfSatellitesPerOrbit int
+	DistancesLoggerChannels *DistanceLoggerDeviceChannels
+	DistanceEntries         helpers.DistanceEntryList
+	// Positions Mode
+	PositionsLoggerChannels *PositionLoggerDeviceChannels
+	PositionEntries         helpers.PositionEntryList
 }
 
 type DistanceLoggerDeviceChannel chan UpdateDistancesMessage
 type DistanceLoggerDeviceChannels []*DistanceLoggerDeviceChannel
 
+type PositionLoggerDeviceChannel chan UpdatePositionMessage
+type PositionLoggerDeviceChannels []*PositionLoggerDeviceChannel
+
 type ILogger interface {
+	// Positions Mode
+	RunPositions(wg *sync.WaitGroup)
+	SetPositionsDeviceChannels(channels *PositionLoggerDeviceChannels)
+	GetPositionsNumberOfDevices() int
+	InitPositionsChannelCases(selectCases *[]reflect.SelectCase)
+	DeletePositionsDevice(index int)
+	addNewPositionEntry(positionsMessage UpdatePositionMessage)
+	logPositionsSimulationSummary()
 	// Distances Mode
 	RunDistances(wg *sync.WaitGroup)
 	SetDistancesDeviceChannels(channels *DistanceLoggerDeviceChannels)
@@ -67,6 +81,100 @@ func (logger *Logger) GetTotalSimulationTime() float64 {
 
 func (logger *Logger) GetTimeStamp() float64 {
 	return logger.TimeStamp
+}
+
+//////////////////////////////////// ****** Positions Mode ****** //////////////////////////////////////////////////
+
+type UpdatePositionMessage struct {
+	DeviceName string
+	TimeStamp  float64 // in milliseconds
+	Spherical  helpers.SphericalCoordinates
+}
+
+func (logger *Logger) InitPositionsChannelCases(selectCases *[]reflect.SelectCase) {
+	channels := *logger.PositionsLoggerChannels
+	for i, channel := range channels {
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
+}
+
+func (logger *Logger) DeletePositionsDevice(index int) {
+	devices := *logger.PositionsLoggerChannels
+	devices = append(devices[:index], devices[index+1:]...)
+	logger.SetPositionsDeviceChannels(&devices)
+}
+
+func startPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
+	for logger.GetPositionsNumberOfDevices() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, logger.GetPositionsNumberOfDevices())
+		logger.InitPositionsChannelCases(&selectSatellitesCases)
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			logger.DeletePositionsDevice(chosen)
+		}
+		positionUpdateMessage := value.Interface().(UpdatePositionMessage)
+		logger.addNewPositionEntry(positionUpdateMessage)
+	}
+	logger.logPositionsSimulationSummary()
+	wg.Done()
+}
+
+func (logger *Logger) RunPositions(wg *sync.WaitGroup) {
+	log.Default().Println("Running Position Analyzer...")
+	go startPositionsLogger(logger, wg)
+}
+
+func (logger *Logger) addNewPositionEntry(positionsMessage UpdatePositionMessage) {
+	logger.PositionEntries = append(logger.PositionEntries, &helpers.PositionEntry{
+		TimeStamp: int(positionsMessage.TimeStamp),
+		Id:        positionsMessage.DeviceName,
+		Latitude:  positionsMessage.Spherical.Latitude,
+		Longitude: positionsMessage.Spherical.Longitude,
+		Radius:    positionsMessage.Spherical.Radius,
+	})
+
+	if logger.TimeStamp < positionsMessage.TimeStamp {
+		logger.TimeStamp = positionsMessage.TimeStamp
+	}
+}
+
+func (logger *Logger) GetPositionsNumberOfDevices() int {
+	return len(*logger.PositionsLoggerChannels)
+}
+
+func (logger *Logger) SetPositionsDeviceChannels(channels *PositionLoggerDeviceChannels) {
+	logger.PositionsLoggerChannels = channels
+}
+
+func (logger *Logger) logPositionsSimulationSummary() {
+	sort.SliceStable(logger.PositionEntries, func(i, j int) bool {
+		return logger.PositionEntries[i].GetTimeStamp() < logger.PositionEntries[j].GetTimeStamp()
+	}) // Sorting events by timestamp
+
+	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
+		err := os.Mkdir("./generated", 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fileName := fmt.Sprintf("./generated/Positions#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
+
+	log.Default().Println("Writing positions to ", fileName)
+	outputFile, err := os.Create(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rows := helpers.GetRowsFromPositionEntries(&logger.PositionEntries)
+	csvWriter := csv.NewWriter(outputFile)
+
+	if err := csvWriter.WriteAll(rows); err != nil {
+		log.Fatal(err)
+	}
+
+	outputFile.Close()
 }
 
 //////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////
@@ -152,7 +260,7 @@ func (logger *Logger) logDistancesSimulationSummary() {
 	fileName := fmt.Sprintf("./generated/Distances#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
 		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
-	log.Default().Println("Writing simulation summary to ", fileName)
+	log.Default().Println("Writing distances to ", fileName)
 	outputFile, err := os.Create(fileName)
 	if err != nil {
 		log.Fatal(err)

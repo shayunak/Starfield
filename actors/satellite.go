@@ -45,6 +45,7 @@ type Satellite struct {
 	LinkerOutgoingChannel *LinkRequestChannel
 	LinkerIncomingChannel *LinkRequestChannel
 	DistanceLoggerChannel *DistanceLoggerDeviceChannel
+	PositionLoggerChannel *PositionLoggerDeviceChannel
 	LoggerChannel         *LoggerDeviceChannel
 	ProgressTokenChannel  *ProgressTokenChannel
 	AckTokenChannel       *AckTokenChannel
@@ -56,6 +57,11 @@ type ISatellite interface {
 	GetName() string
 	getDistancesTimeStamp() float64
 	getTotalSimulationTime() float64
+	// Position Mode
+	RunPositions()
+	GetPositionLoggerChannel() *PositionLoggerDeviceChannel
+	SetPositionLoggerChannel(channel *PositionLoggerDeviceChannel)
+	logPosition()
 	// Distance Mode
 	RunDistances()
 	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
@@ -149,10 +155,53 @@ func NewSatellite(id int, orbitalPhase float64, dt float64, totalSimulationTime 
 	return &newSatellite
 }
 
+//////////////////////////////////// ****** Positions Mode ****** //////////////////////////////////////////////////
+
+func (satellite *Satellite) RunPositions() {
+	log.Default().Println("Running satellite (Position Mode): ", satellite.Name)
+	go startSatellitePositions(satellite)
+}
+
+func (satellite *Satellite) GetPositionLoggerChannel() *PositionLoggerDeviceChannel {
+	return satellite.PositionLoggerChannel
+}
+
+func (satellite *Satellite) SetPositionLoggerChannel(channel *PositionLoggerDeviceChannel) {
+	satellite.PositionLoggerChannel = channel
+}
+
+func (satellite *Satellite) logPosition() {
+	sphericalCoordinates := helpers.ConvertToSpherical(
+		helpers.ConvertToCartesian(
+			helpers.KepplerianCoordinates{
+				Anomaly:     satellite.OrbitalAnomaly,
+				Radius:      satellite.Orbit.GetRadius(),
+				Ascension:   satellite.Orbit.GetAscension(),
+				Inclination: satellite.Orbit.GetInclination(),
+			},
+		),
+	)
+
+	(*satellite.PositionLoggerChannel) <- UpdatePositionMessage{
+		DeviceName: satellite.Name,
+		TimeStamp:  satellite.DistancesTimeStamp,
+		Spherical:  sphericalCoordinates,
+	}
+}
+
+func startSatellitePositions(mySatellite ISatellite) {
+	for mySatellite.getDistancesTimeStamp() <= mySatellite.getTotalSimulationTime() {
+		mySatellite.logPosition()
+		mySatellite.nextTimeStep()
+		mySatellite.updatePosition()
+	}
+	close(*mySatellite.GetPositionLoggerChannel())
+}
+
 //////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////
 
 func (satellite *Satellite) RunDistances() {
-	log.Default().Println("Running satellite (Distance Mode): ", satellite.Id)
+	log.Default().Println("Running satellite (Distance Mode): ", satellite.Name)
 	go startSatelliteDistances(satellite)
 }
 

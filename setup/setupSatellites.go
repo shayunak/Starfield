@@ -59,6 +59,28 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	}
 }
 
+func startPositionsSatellites(satellites SatelliteList) actors.PositionLoggerDeviceChannels {
+	channels := make(actors.PositionLoggerDeviceChannels, 0)
+	for _, satellite := range satellites {
+		channel := make(actors.PositionLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		satellite.SetPositionLoggerChannel(&channel)
+		satellite.RunPositions()
+	}
+	return channels
+}
+
+func startDistancesSatellites(satellites SatelliteList) actors.DistanceLoggerDeviceChannels {
+	channels := make(actors.DistanceLoggerDeviceChannels, 0)
+	for _, satellite := range satellites {
+		channel := make(actors.DistanceLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		satellite.SetDistanceLoggerChannel(&channel)
+		satellite.RunDistances()
+	}
+	return channels
+}
+
 func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels,
 	actors.LinkRequestChannels, actors.LinkRequestChannels,
 	actors.ProgressTokenChannels, actors.AckTokenChannels, []string) {
@@ -88,15 +110,4 @@ func startSatellites(satellites SatelliteList) (actors.LoggerDeviceChannels,
 		satellite.Run()
 	}
 	return logChannels, linkIncomingChannels, linkOutgoingChannels, tokenChannels, ackChannels, satelliteNames
-}
-
-func startDistancesSatellites(satellites SatelliteList) actors.DistanceLoggerDeviceChannels {
-	channels := make(actors.DistanceLoggerDeviceChannels, 0)
-	for _, satellite := range satellites {
-		channel := make(actors.DistanceLoggerDeviceChannel)
-		channels = append(channels, &channel)
-		satellite.SetDistanceLoggerChannel(&channel)
-		satellite.RunDistances()
-	}
-	return channels
 }

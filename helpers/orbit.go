@@ -7,17 +7,6 @@ import (
 	"strings"
 )
 
-type GroundStationEntry struct {
-	Name       string
-	CalcValues OrbitCalc
-}
-
-type CartesianCoordinates struct {
-	X float64 // in meters
-	Y float64 // in meters
-	Z float64 // in meters
-}
-
 type Orbit struct {
 	Id                 int
 	ConsellationName   string
@@ -35,11 +24,11 @@ type IOrbit interface {
 	GetConstellationName() string
 	GetOrbitName() string
 	GetAscension() float64
+	GetInclination() float64
 	GetRadius() float64
 	GetEarthRotaionMotion() float64
 	GetAltitude() float64
 	IsOwnerSatellite(ownerId string) bool
-	ConvertToCartesian(anomaly float64) CartesianCoordinates
 }
 
 func (orbit *Orbit) GetOrbitName() string {
@@ -66,6 +55,10 @@ func (orbit *Orbit) GetAscension() float64 {
 	return orbit.Ascension
 }
 
+func (orbit *Orbit) GetInclination() float64 {
+	return orbit.Inclination
+}
+
 func (orbit *Orbit) GetRadius() float64 {
 	return orbit.Radius
 }
@@ -76,16 +69,6 @@ func (orbit *Orbit) GetEarthRotaionMotion() float64 {
 
 func (orbit *Orbit) GetAltitude() float64 {
 	return orbit.Altitude
-}
-
-func (orbit *Orbit) ConvertToCartesian(anomaly float64) CartesianCoordinates {
-	return CartesianCoordinates{
-		X: orbit.Radius * (math.Cos(anomaly)*math.Cos(orbit.Ascension) -
-			math.Sin(anomaly)*math.Cos(orbit.Inclination)*math.Sin(orbit.Ascension)),
-		Y: orbit.Radius * (math.Cos(anomaly)*math.Sin(orbit.Ascension) +
-			math.Sin(anomaly)*math.Cos(orbit.Inclination)*math.Cos(orbit.Ascension)),
-		Z: orbit.Radius * math.Sin(anomaly) * math.Sin(orbit.Inclination),
-	}
 }
 
 func NewOrbit(radius float64, earthRotationMotion float64, altitude float64, ascension float64, inclination float64, id int,
