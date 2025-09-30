@@ -56,6 +56,7 @@ func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroun
 		ElevationLimitRatio: calculateElevationLimitRatio(config.OrbitConfig.EarthRadius, orbitRadius,
 			config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
 		Altitude:                    config.OrbitConfig.Altitude,
+		EarthRadius:                 config.OrbitConfig.EarthRadius,
 		EarthOrbitRatio:             config.OrbitConfig.EarthRadius / orbitRadius,
 		EarthRotaionMotion:          earthMotionRadiansPerSecond,
 		GroundStationsDistanceLimit: calculateGroundStationDistancLimit(orbitRadius, config.SatelliteConfig.MinElevationAngle, config.OrbitConfig.Altitude),
@@ -115,8 +116,9 @@ func initTopology(satellites SatelliteList, entries map[string]map[string]connec
 	}
 }
 
-func SetupSimulatorPositions(configFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
+func SetupSimulatorCartesianPositions(configFileName string, groundStationFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
 	var satellites SatelliteList
+	var groundStations GroundStationList
 	var logger actors.ILogger
 
 	// reading the config file
@@ -127,13 +129,39 @@ func SetupSimulatorPositions(configFileName string, timeStep int, totalSimulatio
 
 	// initializing the actors
 	initLogger(&logger, config, timeStep, totalSimulationTime, 0)
+	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
 	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
 
 	// starting the actors
-	channels := startPositionsSatellites(satellites)
+	channels := startCartesianPositionsSatellites(satellites)
+	channels = append(channels, startCartesianPositionsGroundStations(groundStations)...)
 
-	logger.SetPositionsDeviceChannels(&channels)
-	logger.RunPositions(simulationDone)
+	logger.SetCartesianPositionsDeviceChannels(&channels)
+	logger.RunCartesianPositions(simulationDone)
+}
+
+func SetupSimulatorSphericalPositions(configFileName string, groundStationFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {
+	var satellites SatelliteList
+	var groundStations GroundStationList
+	var logger actors.ILogger
+
+	// reading the config file
+	config := getConfig(configFileName)
+
+	// initializing the calculators
+	anomalyCalc, groundCalc := initCalculators(config)
+
+	// initializing the actors
+	initLogger(&logger, config, timeStep, totalSimulationTime, 0)
+	initGroundStations(&groundStations, config, groundStationFileName, groundCalc, timeStep, totalSimulationTime)
+	initSatellites(&satellites, config, anomalyCalc, timeStep, totalSimulationTime, groundCalc)
+
+	// starting the actors
+	channels := startSphericalPositionsSatellites(satellites)
+	channels = append(channels, startSphericalPositionsGroundStations(groundStations)...)
+
+	logger.SetSphericalPositionsDeviceChannels(&channels)
+	logger.RunSphericalPositions(simulationDone)
 }
 
 func SetupSimulatorDistances(configFileName string, groundStationFileName string, timeStep int, totalSimulationTime int, simulationDone *sync.WaitGroup) {

@@ -91,6 +91,28 @@ func initGroundStations(groundStations *GroundStationList, config Config, ground
 	groundCalc.SetGroundStationSpecs(&groundStationSpecs)
 }
 
+func startSphericalPositionsGroundStations(groundStations GroundStationList) actors.SphericalPositionLoggerDeviceChannels {
+	channels := make(actors.SphericalPositionLoggerDeviceChannels, 0)
+	for _, groundStation := range groundStations {
+		channel := make(actors.SphericalPositionLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		groundStation.SetSphericalPositionLoggerChannel(&channel)
+		groundStation.RunSphericalPositions()
+	}
+	return channels
+}
+
+func startCartesianPositionsGroundStations(groundStations GroundStationList) actors.CartesianPositionLoggerDeviceChannels {
+	channels := make(actors.CartesianPositionLoggerDeviceChannels, 0)
+	for _, groundStation := range groundStations {
+		channel := make(actors.CartesianPositionLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		groundStation.SetCartesianPositionLoggerChannel(&channel)
+		groundStation.RunCartesianPositions()
+	}
+	return channels
+}
+
 func startDistancesGroundStations(groundStations GroundStationList) actors.DistanceLoggerDeviceChannels {
 	channels := make(actors.DistanceLoggerDeviceChannels, 0)
 	for _, groundStation := range groundStations {

@@ -31,25 +31,37 @@ type Logger struct {
 	DistancesLoggerChannels *DistanceLoggerDeviceChannels
 	DistanceEntries         helpers.DistanceEntryList
 	// Positions Mode
-	PositionsLoggerChannels *PositionLoggerDeviceChannels
-	PositionEntries         helpers.PositionEntryList
+	SphericalPositionsLoggerChannels *SphericalPositionLoggerDeviceChannels
+	CartesianPositionsLoggerChannels *CartesianPositionLoggerDeviceChannels
+	SphericalPositionEntries         helpers.PositionEntryList
+	CartesianPositionEntries         helpers.PositionEntryList
 }
 
 type DistanceLoggerDeviceChannel chan UpdateDistancesMessage
 type DistanceLoggerDeviceChannels []*DistanceLoggerDeviceChannel
 
-type PositionLoggerDeviceChannel chan UpdatePositionMessage
-type PositionLoggerDeviceChannels []*PositionLoggerDeviceChannel
+type SphericalPositionLoggerDeviceChannel chan UpdateSphericalPositionMessage
+type SphericalPositionLoggerDeviceChannels []*SphericalPositionLoggerDeviceChannel
+
+type CartesianPositionLoggerDeviceChannel chan UpdateCartesianPositionMessage
+type CartesianPositionLoggerDeviceChannels []*CartesianPositionLoggerDeviceChannel
 
 type ILogger interface {
 	// Positions Mode
-	RunPositions(wg *sync.WaitGroup)
-	SetPositionsDeviceChannels(channels *PositionLoggerDeviceChannels)
-	GetPositionsNumberOfDevices() int
-	InitPositionsChannelCases(selectCases *[]reflect.SelectCase)
-	DeletePositionsDevice(index int)
-	addNewPositionEntry(positionsMessage UpdatePositionMessage)
-	logPositionsSimulationSummary()
+	RunSphericalPositions(wg *sync.WaitGroup)
+	RunCartesianPositions(wg *sync.WaitGroup)
+	SetSphericalPositionsDeviceChannels(channels *SphericalPositionLoggerDeviceChannels)
+	SetCartesianPositionsDeviceChannels(channels *CartesianPositionLoggerDeviceChannels)
+	GetSphericalPositionsNumberOfDevices() int
+	GetCartesianPositionsNumberOfDevices() int
+	InitSphericalPositionsChannelCases(selectCases *[]reflect.SelectCase)
+	InitCartesianPositionsChannelCases(selectCases *[]reflect.SelectCase)
+	DeleteSphericalPositionsDevice(index int)
+	DeleteCartesianPositionsDevice(index int)
+	addNewSphericalPositionEntry(positionsMessage UpdateSphericalPositionMessage)
+	addNewCartesianPositionEntry(positionsMessage UpdateCartesianPositionMessage)
+	logSphericalPositionsSimulationSummary()
+	logCartesianPositionsSimulationSummary()
 	// Distances Mode
 	RunDistances(wg *sync.WaitGroup)
 	SetDistancesDeviceChannels(channels *DistanceLoggerDeviceChannels)
@@ -85,47 +97,86 @@ func (logger *Logger) GetTimeStamp() float64 {
 
 //////////////////////////////////// ****** Positions Mode ****** //////////////////////////////////////////////////
 
-type UpdatePositionMessage struct {
+type UpdateSphericalPositionMessage struct {
 	DeviceName string
 	TimeStamp  float64 // in milliseconds
 	Spherical  helpers.SphericalCoordinates
 }
 
-func (logger *Logger) InitPositionsChannelCases(selectCases *[]reflect.SelectCase) {
-	channels := *logger.PositionsLoggerChannels
+type UpdateCartesianPositionMessage struct {
+	DeviceName string
+	TimeStamp  float64 // in milliseconds
+	Cartesian  helpers.CartesianCoordinates
+}
+
+func (logger *Logger) InitSphericalPositionsChannelCases(selectCases *[]reflect.SelectCase) {
+	channels := *logger.SphericalPositionsLoggerChannels
 	for i, channel := range channels {
 		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
 	}
 }
 
-func (logger *Logger) DeletePositionsDevice(index int) {
-	devices := *logger.PositionsLoggerChannels
-	devices = append(devices[:index], devices[index+1:]...)
-	logger.SetPositionsDeviceChannels(&devices)
+func (logger *Logger) InitCartesianPositionsChannelCases(selectCases *[]reflect.SelectCase) {
+	channels := *logger.CartesianPositionsLoggerChannels
+	for i, channel := range channels {
+		(*selectCases)[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(*channel)}
+	}
 }
 
-func startPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
-	for logger.GetPositionsNumberOfDevices() > 0 {
-		selectSatellitesCases := make([]reflect.SelectCase, logger.GetPositionsNumberOfDevices())
-		logger.InitPositionsChannelCases(&selectSatellitesCases)
+func (logger *Logger) DeleteSphericalPositionsDevice(index int) {
+	devices := *logger.SphericalPositionsLoggerChannels
+	devices = append(devices[:index], devices[index+1:]...)
+	logger.SetSphericalPositionsDeviceChannels(&devices)
+}
+
+func (logger *Logger) DeleteCartesianPositionsDevice(index int) {
+	devices := *logger.CartesianPositionsLoggerChannels
+	devices = append(devices[:index], devices[index+1:]...)
+	logger.SetCartesianPositionsDeviceChannels(&devices)
+}
+
+func startSphericalPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
+	for logger.GetSphericalPositionsNumberOfDevices() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, logger.GetSphericalPositionsNumberOfDevices())
+		logger.InitSphericalPositionsChannelCases(&selectSatellitesCases)
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
-			logger.DeletePositionsDevice(chosen)
+			logger.DeleteSphericalPositionsDevice(chosen)
 		}
-		positionUpdateMessage := value.Interface().(UpdatePositionMessage)
-		logger.addNewPositionEntry(positionUpdateMessage)
+		positionUpdateMessage := value.Interface().(UpdateSphericalPositionMessage)
+		logger.addNewSphericalPositionEntry(positionUpdateMessage)
 	}
-	logger.logPositionsSimulationSummary()
+	logger.logSphericalPositionsSimulationSummary()
 	wg.Done()
 }
 
-func (logger *Logger) RunPositions(wg *sync.WaitGroup) {
-	log.Default().Println("Running Position Analyzer...")
-	go startPositionsLogger(logger, wg)
+func startCartesianPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
+	for logger.GetCartesianPositionsNumberOfDevices() > 0 {
+		selectSatellitesCases := make([]reflect.SelectCase, logger.GetCartesianPositionsNumberOfDevices())
+		logger.InitCartesianPositionsChannelCases(&selectSatellitesCases)
+		chosen, value, ok := reflect.Select(selectSatellitesCases)
+		if !ok {
+			logger.DeleteCartesianPositionsDevice(chosen)
+		}
+		positionUpdateMessage := value.Interface().(UpdateCartesianPositionMessage)
+		logger.addNewCartesianPositionEntry(positionUpdateMessage)
+	}
+	logger.logCartesianPositionsSimulationSummary()
+	wg.Done()
 }
 
-func (logger *Logger) addNewPositionEntry(positionsMessage UpdatePositionMessage) {
-	logger.PositionEntries = append(logger.PositionEntries, &helpers.PositionEntry{
+func (logger *Logger) RunSphericalPositions(wg *sync.WaitGroup) {
+	log.Default().Println("Running Spherical Position Analyzer...")
+	go startSphericalPositionsLogger(logger, wg)
+}
+
+func (logger *Logger) RunCartesianPositions(wg *sync.WaitGroup) {
+	log.Default().Println("Running Cartesian Position Analyzer...")
+	go startCartesianPositionsLogger(logger, wg)
+}
+
+func (logger *Logger) addNewSphericalPositionEntry(positionsMessage UpdateSphericalPositionMessage) {
+	logger.SphericalPositionEntries = append(logger.SphericalPositionEntries, &helpers.SphericalPositionEntry{
 		TimeStamp: int(positionsMessage.TimeStamp),
 		Id:        positionsMessage.DeviceName,
 		Latitude:  positionsMessage.Spherical.Latitude,
@@ -138,17 +189,39 @@ func (logger *Logger) addNewPositionEntry(positionsMessage UpdatePositionMessage
 	}
 }
 
-func (logger *Logger) GetPositionsNumberOfDevices() int {
-	return len(*logger.PositionsLoggerChannels)
+func (logger *Logger) addNewCartesianPositionEntry(positionsMessage UpdateCartesianPositionMessage) {
+	logger.CartesianPositionEntries = append(logger.CartesianPositionEntries, &helpers.CartesianPositionEntry{
+		TimeStamp: int(positionsMessage.TimeStamp),
+		Id:        positionsMessage.DeviceName,
+		X:         positionsMessage.Cartesian.X,
+		Y:         positionsMessage.Cartesian.Y,
+		Z:         positionsMessage.Cartesian.Z,
+	})
+
+	if logger.TimeStamp < positionsMessage.TimeStamp {
+		logger.TimeStamp = positionsMessage.TimeStamp
+	}
 }
 
-func (logger *Logger) SetPositionsDeviceChannels(channels *PositionLoggerDeviceChannels) {
-	logger.PositionsLoggerChannels = channels
+func (logger *Logger) GetSphericalPositionsNumberOfDevices() int {
+	return len(*logger.SphericalPositionsLoggerChannels)
 }
 
-func (logger *Logger) logPositionsSimulationSummary() {
-	sort.SliceStable(logger.PositionEntries, func(i, j int) bool {
-		return logger.PositionEntries[i].GetTimeStamp() < logger.PositionEntries[j].GetTimeStamp()
+func (logger *Logger) GetCartesianPositionsNumberOfDevices() int {
+	return len(*logger.CartesianPositionsLoggerChannels)
+}
+
+func (logger *Logger) SetSphericalPositionsDeviceChannels(channels *SphericalPositionLoggerDeviceChannels) {
+	logger.SphericalPositionsLoggerChannels = channels
+}
+
+func (logger *Logger) SetCartesianPositionsDeviceChannels(channels *CartesianPositionLoggerDeviceChannels) {
+	logger.CartesianPositionsLoggerChannels = channels
+}
+
+func (logger *Logger) logSphericalPositionsSimulationSummary() {
+	sort.SliceStable(logger.SphericalPositionEntries, func(i, j int) bool {
+		return logger.SphericalPositionEntries[i].GetTimeStamp() < logger.SphericalPositionEntries[j].GetTimeStamp()
 	}) // Sorting events by timestamp
 
 	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
@@ -158,7 +231,7 @@ func (logger *Logger) logPositionsSimulationSummary() {
 		}
 	}
 
-	fileName := fmt.Sprintf("./generated/Positions#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+	fileName := fmt.Sprintf("./generated/SphericalPositions#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
 		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
 
 	log.Default().Println("Writing positions to ", fileName)
@@ -167,7 +240,38 @@ func (logger *Logger) logPositionsSimulationSummary() {
 		log.Fatal(err)
 	}
 
-	rows := helpers.GetRowsFromPositionEntries(&logger.PositionEntries)
+	rows := helpers.GetRowsFromPositionEntries(&logger.SphericalPositionEntries)
+	csvWriter := csv.NewWriter(outputFile)
+
+	if err := csvWriter.WriteAll(rows); err != nil {
+		log.Fatal(err)
+	}
+
+	outputFile.Close()
+}
+
+func (logger *Logger) logCartesianPositionsSimulationSummary() {
+	sort.SliceStable(logger.CartesianPositionEntries, func(i, j int) bool {
+		return logger.CartesianPositionEntries[i].GetTimeStamp() < logger.CartesianPositionEntries[j].GetTimeStamp()
+	}) // Sorting events by timestamp
+
+	if _, err := os.Stat("./generated"); os.IsNotExist(err) {
+		err := os.Mkdir("./generated", 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fileName := fmt.Sprintf("./generated/CartesianPositions#%s#%s(%d,%d)#%dms#%ds.csv", time.Now().Format("2006_01_02,15_04_05"),
+		logger.ConsellationName, logger.NumberOfOrbits, logger.NumberOfSatellitesPerOrbit, logger.TimeStep, int(logger.TotalSimulationTime/1000.0))
+
+	log.Default().Println("Writing positions to ", fileName)
+	outputFile, err := os.Create(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rows := helpers.GetRowsFromPositionEntries(&logger.CartesianPositionEntries)
 	csvWriter := csv.NewWriter(outputFile)
 
 	if err := csvWriter.WriteAll(rows); err != nil {

@@ -24,7 +24,6 @@ type Satellite struct {
 	TotalSimulationTime float64 // in milliseconds
 
 	// Geometrical parameters
-	// Position            helpers.CartesianCoordinates (Unnecessary for satellite distances calculations)
 	AnomalyElements           helpers.AnomalyElements
 	Orbit                     helpers.IOrbit
 	OrbitalAnomaly            float64 // in radians
@@ -37,19 +36,20 @@ type Satellite struct {
 	lastAckTimeStamp float64 // in milliseconds
 
 	// Goroutines and connections, and channels
-	InterfaceBufferSize   int
-	ISLInterfaces         []connections.INetworkInterface
-	AvailableISL          int
-	GSLInterfaceSample    connections.INetworkInterface
-	GSLInterfaces         map[string]connections.INetworkInterface
-	LinkerOutgoingChannel *LinkRequestChannel
-	LinkerIncomingChannel *LinkRequestChannel
-	DistanceLoggerChannel *DistanceLoggerDeviceChannel
-	PositionLoggerChannel *PositionLoggerDeviceChannel
-	LoggerChannel         *LoggerDeviceChannel
-	ProgressTokenChannel  *ProgressTokenChannel
-	AckTokenChannel       *AckTokenChannel
-	PendingConnections    []LinkRequest
+	InterfaceBufferSize            int
+	ISLInterfaces                  []connections.INetworkInterface
+	AvailableISL                   int
+	GSLInterfaceSample             connections.INetworkInterface
+	GSLInterfaces                  map[string]connections.INetworkInterface
+	LinkerOutgoingChannel          *LinkRequestChannel
+	LinkerIncomingChannel          *LinkRequestChannel
+	DistanceLoggerChannel          *DistanceLoggerDeviceChannel
+	SphericalPositionLoggerChannel *SphericalPositionLoggerDeviceChannel
+	CartesianPositionLoggerChannel *CartesianPositionLoggerDeviceChannel
+	LoggerChannel                  *LoggerDeviceChannel
+	ProgressTokenChannel           *ProgressTokenChannel
+	AckTokenChannel                *AckTokenChannel
+	PendingConnections             []LinkRequest
 }
 
 type ISatellite interface {
@@ -58,10 +58,14 @@ type ISatellite interface {
 	getDistancesTimeStamp() float64
 	getTotalSimulationTime() float64
 	// Position Mode
-	RunPositions()
-	GetPositionLoggerChannel() *PositionLoggerDeviceChannel
-	SetPositionLoggerChannel(channel *PositionLoggerDeviceChannel)
-	logPosition()
+	RunCartesianPositions()
+	RunSphericalPositions()
+	GetSphericalPositionLoggerChannel() *SphericalPositionLoggerDeviceChannel
+	GetCartesianPositionLoggerChannel() *CartesianPositionLoggerDeviceChannel
+	SetSphericalPositionLoggerChannel(channel *SphericalPositionLoggerDeviceChannel)
+	SetCartesianPositionLoggerChannel(channel *CartesianPositionLoggerDeviceChannel)
+	logSphericalPosition()
+	logCartesianPosition()
 	// Distance Mode
 	RunDistances()
 	GetDistanceLoggerChannel() *DistanceLoggerDeviceChannel
@@ -157,20 +161,33 @@ func NewSatellite(id int, orbitalPhase float64, dt float64, totalSimulationTime 
 
 //////////////////////////////////// ****** Positions Mode ****** //////////////////////////////////////////////////
 
-func (satellite *Satellite) RunPositions() {
-	log.Default().Println("Running satellite (Position Mode): ", satellite.Name)
-	go startSatellitePositions(satellite)
+func (satellite *Satellite) RunSphericalPositions() {
+	log.Default().Println("Running satellite (Spherical position Mode): ", satellite.Name)
+	go startSphericalSatellitePositions(satellite)
 }
 
-func (satellite *Satellite) GetPositionLoggerChannel() *PositionLoggerDeviceChannel {
-	return satellite.PositionLoggerChannel
+func (satellite *Satellite) RunCartesianPositions() {
+	log.Default().Println("Running satellite (Cartesian position Mode): ", satellite.Name)
+	go startCartesianSatellitePositions(satellite)
 }
 
-func (satellite *Satellite) SetPositionLoggerChannel(channel *PositionLoggerDeviceChannel) {
-	satellite.PositionLoggerChannel = channel
+func (satellite *Satellite) GetSphericalPositionLoggerChannel() *SphericalPositionLoggerDeviceChannel {
+	return satellite.SphericalPositionLoggerChannel
 }
 
-func (satellite *Satellite) logPosition() {
+func (satellite *Satellite) GetCartesianPositionLoggerChannel() *CartesianPositionLoggerDeviceChannel {
+	return satellite.CartesianPositionLoggerChannel
+}
+
+func (satellite *Satellite) SetSphericalPositionLoggerChannel(channel *SphericalPositionLoggerDeviceChannel) {
+	satellite.SphericalPositionLoggerChannel = channel
+}
+
+func (satellite *Satellite) SetCartesianPositionLoggerChannel(channel *CartesianPositionLoggerDeviceChannel) {
+	satellite.CartesianPositionLoggerChannel = channel
+}
+
+func (satellite *Satellite) logSphericalPosition() {
 	sphericalCoordinates := helpers.ConvertToSpherical(
 		helpers.ConvertToCartesian(
 			helpers.KepplerianCoordinates{
@@ -182,20 +199,46 @@ func (satellite *Satellite) logPosition() {
 		),
 	)
 
-	(*satellite.PositionLoggerChannel) <- UpdatePositionMessage{
+	(*satellite.SphericalPositionLoggerChannel) <- UpdateSphericalPositionMessage{
 		DeviceName: satellite.Name,
 		TimeStamp:  satellite.DistancesTimeStamp,
 		Spherical:  sphericalCoordinates,
 	}
 }
 
-func startSatellitePositions(mySatellite ISatellite) {
+func (satellite *Satellite) logCartesianPosition() {
+	cartesianCoordinates := helpers.ConvertToCartesian(
+		helpers.KepplerianCoordinates{
+			Anomaly:     satellite.OrbitalAnomaly,
+			Radius:      satellite.Orbit.GetRadius(),
+			Ascension:   satellite.Orbit.GetAscension(),
+			Inclination: satellite.Orbit.GetInclination(),
+		},
+	)
+
+	(*satellite.CartesianPositionLoggerChannel) <- UpdateCartesianPositionMessage{
+		DeviceName: satellite.Name,
+		TimeStamp:  satellite.DistancesTimeStamp,
+		Cartesian:  cartesianCoordinates,
+	}
+}
+
+func startSphericalSatellitePositions(mySatellite ISatellite) {
 	for mySatellite.getDistancesTimeStamp() <= mySatellite.getTotalSimulationTime() {
-		mySatellite.logPosition()
+		mySatellite.logSphericalPosition()
 		mySatellite.nextTimeStep()
 		mySatellite.updatePosition()
 	}
-	close(*mySatellite.GetPositionLoggerChannel())
+	close(*mySatellite.GetSphericalPositionLoggerChannel())
+}
+
+func startCartesianSatellitePositions(mySatellite ISatellite) {
+	for mySatellite.getDistancesTimeStamp() <= mySatellite.getTotalSimulationTime() {
+		mySatellite.logCartesianPosition()
+		mySatellite.nextTimeStep()
+		mySatellite.updatePosition()
+	}
+	close(*mySatellite.GetCartesianPositionLoggerChannel())
 }
 
 //////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////

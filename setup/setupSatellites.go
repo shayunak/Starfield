@@ -59,13 +59,24 @@ func initSatellites(satellites *SatelliteList, config Config, anomalyCalc helper
 	}
 }
 
-func startPositionsSatellites(satellites SatelliteList) actors.PositionLoggerDeviceChannels {
-	channels := make(actors.PositionLoggerDeviceChannels, 0)
+func startCartesianPositionsSatellites(satellites SatelliteList) actors.CartesianPositionLoggerDeviceChannels {
+	channels := make(actors.CartesianPositionLoggerDeviceChannels, 0)
 	for _, satellite := range satellites {
-		channel := make(actors.PositionLoggerDeviceChannel)
+		channel := make(actors.CartesianPositionLoggerDeviceChannel)
 		channels = append(channels, &channel)
-		satellite.SetPositionLoggerChannel(&channel)
-		satellite.RunPositions()
+		satellite.SetCartesianPositionLoggerChannel(&channel)
+		satellite.RunCartesianPositions()
+	}
+	return channels
+}
+
+func startSphericalPositionsSatellites(satellites SatelliteList) actors.SphericalPositionLoggerDeviceChannels {
+	channels := make(actors.SphericalPositionLoggerDeviceChannels, 0)
+	for _, satellite := range satellites {
+		channel := make(actors.SphericalPositionLoggerDeviceChannel)
+		channels = append(channels, &channel)
+		satellite.SetSphericalPositionLoggerChannel(&channel)
+		satellite.RunSphericalPositions()
 	}
 	return channels
 }

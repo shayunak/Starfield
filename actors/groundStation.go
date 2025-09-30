@@ -38,22 +38,33 @@ type GroundStation struct {
 	lastAckTimeStamp float64 // in milliseconds
 
 	// Goroutines and connections, and channels
-	InterfaceBufferSize   int
-	GSLInterfaceSample    connections.INetworkInterface
-	GSLInterfaces         map[string]connections.INetworkInterface
-	DistanceLoggerChannel *DistanceLoggerDeviceChannel
-	LoggerChannel         *LoggerDeviceChannel
-	ProgressTokenChannel  *ProgressTokenChannel
-	AckTokenChannel       *AckTokenChannel
-	LinkerOutgoingChannel *LinkRequestChannel
-	LinkerIncomingChannel *LinkRequestChannel
-	PendingConnections    []LinkRequest
+	InterfaceBufferSize            int
+	GSLInterfaceSample             connections.INetworkInterface
+	GSLInterfaces                  map[string]connections.INetworkInterface
+	DistanceLoggerChannel          *DistanceLoggerDeviceChannel
+	SphericalPositionLoggerChannel *SphericalPositionLoggerDeviceChannel
+	CartesianPositionLoggerChannel *CartesianPositionLoggerDeviceChannel
+	LoggerChannel                  *LoggerDeviceChannel
+	ProgressTokenChannel           *ProgressTokenChannel
+	AckTokenChannel                *AckTokenChannel
+	LinkerOutgoingChannel          *LinkRequestChannel
+	LinkerIncomingChannel          *LinkRequestChannel
+	PendingConnections             []LinkRequest
 }
 
 type IGroundStation interface {
 	getDistancesTimeStamp() float64
 	getTotalSimulationTime() float64
 	GetName() string
+	// Position Mode
+	RunCartesianPositions()
+	RunSphericalPositions()
+	GetSphericalPositionLoggerChannel() *SphericalPositionLoggerDeviceChannel
+	GetCartesianPositionLoggerChannel() *CartesianPositionLoggerDeviceChannel
+	SetSphericalPositionLoggerChannel(channel *SphericalPositionLoggerDeviceChannel)
+	SetCartesianPositionLoggerChannel(channel *CartesianPositionLoggerDeviceChannel)
+	logSphericalPosition()
+	logCartesianPosition()
 	// Distance Mode
 	RunDistances()
 	nextTimeStep()
@@ -135,6 +146,86 @@ func NewGroundStation(name string, latitude float64, longitude float64, dt float
 	return &newGS
 }
 
+//////////////////////////////////// ****** Positions Mode ****** //////////////////////////////////////////////////
+
+func (gs *GroundStation) RunSphericalPositions() {
+	log.Default().Println("Running ground station (Spherical position Mode): ", gs.Name)
+	go startSphericalGroundStationPositions(gs)
+}
+
+func (gs *GroundStation) RunCartesianPositions() {
+	log.Default().Println("Running ground station (Cartesian position Mode): ", gs.Name)
+	go startCartesianGroundStationPositions(gs)
+}
+
+func (gs *GroundStation) GetSphericalPositionLoggerChannel() *SphericalPositionLoggerDeviceChannel {
+	return gs.SphericalPositionLoggerChannel
+}
+
+func (gs *GroundStation) GetCartesianPositionLoggerChannel() *CartesianPositionLoggerDeviceChannel {
+	return gs.CartesianPositionLoggerChannel
+}
+
+func (gs *GroundStation) SetSphericalPositionLoggerChannel(channel *SphericalPositionLoggerDeviceChannel) {
+	gs.SphericalPositionLoggerChannel = channel
+}
+
+func (gs *GroundStation) SetCartesianPositionLoggerChannel(channel *CartesianPositionLoggerDeviceChannel) {
+	gs.CartesianPositionLoggerChannel = channel
+}
+
+func (gs *GroundStation) logSphericalPosition() {
+	adjustedLongitude := math.Mod(gs.Longitude+2.0*math.Pi, 2.0*math.Pi)
+	if adjustedLongitude > math.Pi {
+		adjustedLongitude -= 2.0 * math.Pi
+	}
+	sphericalCoordinates := helpers.SphericalCoordinates{
+		Radius:    gs.GSCalculation.GetEarthRadius(),
+		Latitude:  gs.Latitude,
+		Longitude: adjustedLongitude,
+	}
+
+	(*gs.SphericalPositionLoggerChannel) <- UpdateSphericalPositionMessage{
+		DeviceName: gs.Name,
+		TimeStamp:  gs.DistancesTimeStamp,
+		Spherical:  sphericalCoordinates,
+	}
+}
+
+func (gs *GroundStation) logCartesianPosition() {
+	cartesianCoordinates := helpers.ConvertToCartesianFromSpherical(
+		helpers.SphericalCoordinates{
+			Radius:    gs.GSCalculation.GetEarthRadius(),
+			Latitude:  gs.Latitude,
+			Longitude: gs.Longitude,
+		},
+	)
+
+	(*gs.CartesianPositionLoggerChannel) <- UpdateCartesianPositionMessage{
+		DeviceName: gs.Name,
+		TimeStamp:  gs.DistancesTimeStamp,
+		Cartesian:  cartesianCoordinates,
+	}
+}
+
+func startSphericalGroundStationPositions(myGS IGroundStation) {
+	for myGS.getDistancesTimeStamp() <= myGS.getTotalSimulationTime() {
+		myGS.logSphericalPosition()
+		myGS.nextTimeStep()
+		myGS.updatePosition()
+	}
+	close(*myGS.GetSphericalPositionLoggerChannel())
+}
+
+func startCartesianGroundStationPositions(myGS IGroundStation) {
+	for myGS.getDistancesTimeStamp() <= myGS.getTotalSimulationTime() {
+		myGS.logCartesianPosition()
+		myGS.nextTimeStep()
+		myGS.updatePosition()
+	}
+	close(*myGS.GetCartesianPositionLoggerChannel())
+}
+
 //////////////////////////////////// ****** Distances Mode ****** //////////////////////////////////////////////////
 
 func (gs *GroundStation) RunDistances() {
@@ -156,6 +247,7 @@ func (gs *GroundStation) nextTimeStep() {
 
 func (gs *GroundStation) updatePosition() {
 	dt := float64(gs.Dt) * 0.001 // milliseconds to seconds
+	gs.Longitude = gs.GSCalculation.UpdatePosition(gs.Longitude, dt)
 	gs.HeadPointAscension = gs.GSCalculation.UpdatePosition(gs.HeadPointAscension, dt)
 }
 

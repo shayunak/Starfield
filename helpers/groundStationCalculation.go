@@ -27,6 +27,7 @@ type GroundStationCalculation struct {
 	AnomalyCalculations         IAnomalyCalculation
 	ElevationLimitRatio         float64
 	Altitude                    float64
+	EarthRadius                 float64
 	EarthOrbitRatio             float64
 	EarthRotaionMotion          float64
 	GroundStations              *GroundStationSpecs
@@ -37,6 +38,7 @@ type GroundStationCalculation struct {
 
 type IGroundStationCalculation interface {
 	GetAnomalyCalculations() IAnomalyCalculation
+	GetEarthRadius() float64
 	FindCoordinatesOfTheAboveHeadPoint(gsName string, latitude float64, longitude float64) (float64, float64)
 	FindSatellitesInRange(Id string, headPointAscension float64, headPointAnomalyEl AnomalyElements, timeStamp float64) map[string]float64
 	FindSatellite(satelliteName string, headPointAnomalyEl AnomalyElements, headPointAscension float64, timeStamp float64) (float64, bool)
@@ -49,6 +51,10 @@ type IGroundStationCalculation interface {
 		earthRotationMotion float64, earthOrbitRatio float64, ascension float64, altitude float64, distances *[]float64, gsInRange *[]string, gsName string)
 	adjustAngles(anomaly float64, deltaLongitude float64, adjustedLongitude float64) (float64, float64)
 	updateDistanceWithAltitude(i int, distances []float64, altitude float64, earthOrbitRatio float64)
+}
+
+func (gsc *GroundStationCalculation) GetEarthRadius() float64 {
+	return gsc.EarthRadius
 }
 
 func (gsc *GroundStationCalculation) SetGroundStationSpecs(gsSpecs *GroundStationSpecs) {

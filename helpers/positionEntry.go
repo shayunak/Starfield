@@ -7,12 +7,20 @@ import (
 
 type PositionEntryList []IPositionEntry
 
-type PositionEntry struct {
+type SphericalPositionEntry struct {
 	TimeStamp int
 	Id        string
 	Latitude  float64
 	Longitude float64
 	Radius    float64
+}
+
+type CartesianPositionEntry struct {
+	TimeStamp int
+	Id        string
+	X         float64
+	Y         float64
+	Z         float64
 }
 
 type IPositionEntry interface {
@@ -21,21 +29,39 @@ type IPositionEntry interface {
 	GetTimeStamp() int
 }
 
-func (entry *PositionEntry) GetTimeStamp() int {
+func (entry *SphericalPositionEntry) GetTimeStamp() int {
 	return entry.TimeStamp
 }
 
-func (entry *PositionEntry) getHeaders() []string {
-	return []string{"TimeStamp(ms)", "Id", "Latitude", "Longitude", "Radius(m)"}
+func (entry *SphericalPositionEntry) getHeaders() []string {
+	return []string{"TimeStamp(ms)", "Id", "Latitude(deg)", "Longitude(deg)", "Radius(m)"}
 }
 
-func (entry *PositionEntry) toSlice() []string {
+func (entry *SphericalPositionEntry) toSlice() []string {
 	return []string{
 		fmt.Sprintf("%d", entry.TimeStamp),
 		entry.Id,
 		fmt.Sprintf("%f", entry.Latitude*180.0/math.Pi),
 		fmt.Sprintf("%f", entry.Longitude*180.0/math.Pi),
 		fmt.Sprintf("%f", entry.Radius),
+	}
+}
+
+func (entry *CartesianPositionEntry) GetTimeStamp() int {
+	return entry.TimeStamp
+}
+
+func (entry *CartesianPositionEntry) getHeaders() []string {
+	return []string{"TimeStamp(ms)", "Id", "X(m)", "Y(m)", "Z(m)"}
+}
+
+func (entry *CartesianPositionEntry) toSlice() []string {
+	return []string{
+		fmt.Sprintf("%d", entry.TimeStamp),
+		entry.Id,
+		fmt.Sprintf("%f", entry.X),
+		fmt.Sprintf("%f", entry.Y),
+		fmt.Sprintf("%f", entry.Z),
 	}
 }
 

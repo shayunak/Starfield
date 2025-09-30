@@ -31,6 +31,14 @@ func ConvertToCartesian(coordinates KepplerianCoordinates) CartesianCoordinates 
 	}
 }
 
+func ConvertToCartesianFromSpherical(coordinates SphericalCoordinates) CartesianCoordinates {
+	return CartesianCoordinates{
+		X: coordinates.Radius * math.Cos(coordinates.Latitude) * math.Cos(coordinates.Longitude),
+		Y: coordinates.Radius * math.Cos(coordinates.Latitude) * math.Sin(coordinates.Longitude),
+		Z: coordinates.Radius * math.Sin(coordinates.Latitude),
+	}
+}
+
 func ConvertToSpherical(coordinates CartesianCoordinates) SphericalCoordinates {
 	return SphericalCoordinates{
 		Radius:    math.Sqrt(coordinates.X*coordinates.X + coordinates.Y*coordinates.Y + coordinates.Z*coordinates.Z),
