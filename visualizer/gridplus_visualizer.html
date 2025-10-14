@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cesium PacketId visualizaiton</title>
+
+  <!-- CesiumJS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+  <style>
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    .ui {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(30,30,30,0.8); color: #fff; padding: 10px 12px; border-radius: 8px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .ui input[type="text"] {
+      width: 220px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: #222; color: #fff;
+    }
+    .ui input[type="file"] {
+      color: #ddd;
+    }
+    .ui button {
+      padding: 6px 10px; border-radius: 6px; border: 0; background: #47a3ff; color: #001b33; font-weight: 600; cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .ui button:hover {
+      opacity: 0.9;
+    }
+    .ui small { opacity: 0.8; }
+    .ui label { font-size: 12px; opacity: 0.9; }
+    .result-display {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+      background: rgba(0,0,0,0.8); color: #fff; padding: 8px 16px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      font-size: 13px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px); min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <!-- file selection -->
+  <div class="ui">
+    <label for="packetInput">PacketId：</label>
+    <input id="packetInput" type="text" placeholder="Enter packetId: for example 12345" />
+    <label>summary.csv：<input id="packetFile" type="file" accept=".csv" /></label>
+    <label>position.csv：<input id="positionFile" type="file" accept=".csv" /></label>
+    <button id="searchBtn">Show packet</button>
+    <button id="toggleTopologyBtn" style="background: #28a745;">Show Topology: ON</button>
+    <small id="statusMsg"></small>
+  </div>
+
+  <!-- Satellite Topology Configuration -->
+  <div class="ui" style="top: 60px;">
+    <label for="numberOfOrbits">Number of orbits:</label>
+    <input id="numberOfOrbits" type="number" placeholder="ex: 72" value="72" style="width: 80px;" />
+    <label for="numberOfSatellitesPerOrbit">Satellites per orbit:</label>
+    <input id="numberOfSatellitesPerOrbit" type="number" placeholder="ex: 22" value="22" style="width: 80px;" />
+    <label for="constellationName">Constellation name:</label>
+    <input id="constellationName" type="text" placeholder="ex: Starlink" value="Starlink" style="width: 120px;" />
+  </div>
+
+  <!-- Permanent result display at bottom -->
+  <div class="result-display" id="resultDisplay">please select CSV files and enter PacketId</div>
+
+  <script type="module">
+    // Cesium Ion Token
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlMTliMWEyOC0yMzYyLTQzYmEtODBkMS1mODA1YjZjNDk5NDciLCJpZCI6MzA2ODU2LCJpYXQiOjE3NDgzNzc4ODd9.Y5dofUrWFXLroBTqI9JHdAuh4Jc2ACZpuY586gEWWVo';
+
+    // Single-file modularization: Utils/Data/Vis
+    const App = (() => {
+      // Utilities
+      const Utils = {
+        // CSV streaming
+        async *streamLinesFromFile(file) {
+          const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+          let { value, done } = await reader.read();
+          let buffer = value || '';
+          while (!done) {
+            const lastNewline = buffer.lastIndexOf('\n');
+            if (lastNewline !== -1) {
+              const lines = buffer.slice(0, lastNewline).split('\n');
+              for (const line of lines) yield line.replace(/\r$/, '');
+              buffer = buffer.slice(lastNewline + 1);
+            }
+            ({ value, done } = await reader.read());
+            buffer += value || '';
+          }
+          if (buffer.length > 0) yield buffer.replace(/\r$/, '');
+        },
+        splitCsvSimple: (line) => line.split(','),
+        headerIndexMap(headers, names) {
+          const idx = {}; for (const n of names) idx[n] = headers.indexOf(n); return idx;
+        },
+
+        // WGS84 and conversions
+        WGS84: (() => {
+          const a = 6378137.0; const f = 1.0 / 298.257223563; const b = a * (1 - f); const e2 = 1 - (b * b) / (a * a);
+          return { a, b, f, e2 };
+        })(),
+        heightFromGeocentricRadius(latDeg, radiusM) {
+          const phi = Cesium.Math.toRadians(Number(latDeg));
+          const sinPhi = Math.sin(phi), cosPhi = Math.cos(phi);
+          const N = Utils.WGS84.a / Math.sqrt(1 - Utils.WGS84.e2 * sinPhi * sinPhi);
+          const rSurface = Math.sqrt((N * cosPhi) ** 2 + (N * (1 - Utils.WGS84.e2) * sinPhi) ** 2);
+          return Number(radiusM) - rSurface;
+        },
+
+        // Position index helpers
+        buildIndexById(positionRows) {
+          const indexById = new Map();
+          for (const r of positionRows) {
+            const id = String(r.Id ?? r.ID ?? '').trim();
+            const t = Number(r['TimeStamp(ms)']);
+            if (!id || !Number.isFinite(t)) continue;
+            if (!indexById.has(id)) indexById.set(id, []);
+            indexById.get(id).push(r);
+          }
+          for (const arr of indexById.values()) {
+            arr.sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
+          }
+          return indexById;
+        },
+        makeNearestFinder(indexById, deltaMs) {
+          return function findNearest(id, target) {
+            const arr = indexById.get(id);
+            if (!arr || arr.length === 0) return null;
+            let lo = 0, hi = arr.length - 1;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              const tmid = Number(arr[mid]['TimeStamp(ms)']);
+              if (tmid < target) lo = mid + 1; else hi = mid;
+            }
+            const cand = [];
+            if (lo < arr.length) cand.push(arr[lo]);
+            if (lo - 1 >= 0)     cand.push(arr[lo - 1]);
+            let best = null, bestDiff = Infinity;
+            for (const c of cand) {
+              const diff = Math.abs(Number(c['TimeStamp(ms)']) - target);
+              if (diff < bestDiff) { best = c; bestDiff = diff; }
+            }
+            return (best && bestDiff <= deltaMs) ? best : null;
+          };
+        },
+        nearestInSorted(arr, target, maxDeltaMs) {
+          if (!arr || arr.length === 0) return null;
+          let lo = 0, hi = arr.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (arr[mid] < target) lo = mid + 1; else hi = mid;
+          }
+          const cands = []; if (lo < arr.length) cands.push(arr[lo]); if (lo - 1 >= 0) cands.push(arr[lo - 1]);
+          let best = null, bestDiff = Infinity;
+          for (const c of cands) { const d = Math.abs(c - target); if (d < bestDiff) { best = c; bestDiff = d; } }
+          return bestDiff <= maxDeltaMs ? best : null;
+        }
+      };
+
+      // Data extraction
+      const Data = {
+        async extractHopsFromPacketFile(packetFile, packetId) {
+          const deviceSet = new Set(); const hops = [];
+          let minTs = Number.POSITIVE_INFINITY, maxTs = Number.NEGATIVE_INFINITY;
+          let headerParsed = false, idx = null;
+          for await (const line of Utils.streamLinesFromFile(packetFile)) {
+            if (!headerParsed) { const headers = Utils.splitCsvSimple(line); idx = Utils.headerIndexMap(headers, ['TimeStamp(ms)','FromDevice','ToDevice','PacketId']); headerParsed = true; continue; }
+            if (!line) continue;
+            const cols = Utils.splitCsvSimple(line);
+            const pid = (cols[idx['PacketId']] ?? '').trim();
+            if (pid !== String(packetId).trim()) continue;
+            const ts = Number(cols[idx['TimeStamp(ms)']]);
+            const from = (cols[idx['FromDevice']] ?? '').trim();
+            const to = (cols[idx['ToDevice']] ?? '').trim();
+            if (Number.isFinite(ts)) {
+              if (from) deviceSet.add(from);
+              if (to) deviceSet.add(to);
+              if (ts < minTs) minTs = ts; if (ts > maxTs) maxTs = ts;
+              hops.push({ 'TimeStamp(ms)': ts, FromDevice: from, ToDevice: to, PacketId: pid });
+            }
+          }
+          if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) { minTs = NaN; maxTs = NaN; }
+          return { hops, deviceSet, minTs, maxTs };
+        },
+        async extractPositionsInRange(positionFile, deviceSet, minTs, maxTs) {
+          const rows = []; if (!Number.isFinite(minTs) || !Number.isFinite(maxTs) || deviceSet.size === 0) return rows;
+          let headerParsed = false, idx = null;
+          for await (const line of Utils.streamLinesFromFile(positionFile)) {
+            if (!headerParsed) { const headers = Utils.splitCsvSimple(line); idx = Utils.headerIndexMap(headers, ['TimeStamp(ms)','Id','Latitude(deg)','Longitude(deg)','Radius(m)']); headerParsed = true; continue; }
+            if (!line) continue;
+            const cols = Utils.splitCsvSimple(line);
+            const id = (cols[idx['Id']] ?? '').trim(); if (!deviceSet.has(id)) continue;
+            const ts = Number(cols[idx['TimeStamp(ms)']]); if (!Number.isFinite(ts) || ts < minTs || ts > maxTs) continue;
+            rows.push({ 'TimeStamp(ms)': ts, Id: id, 'Latitude(deg)': Number(cols[idx['Latitude(deg)']]), 'Longitude(deg)': Number(cols[idx['Longitude(deg)']]), 'Radius(m)': Number(cols[idx['Radius(m)']]) });
+          }
+          return rows;
+        },
+        async extractAllPositionsInRange(positionFile, minTs, maxTs) {
+          const rows = []; if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) return rows;
+          let headerParsed = false, idx = null;
+          for await (const line of Utils.streamLinesFromFile(positionFile)) {
+            if (!headerParsed) { const headers = Utils.splitCsvSimple(line); idx = Utils.headerIndexMap(headers, ['TimeStamp(ms)','Id','Latitude(deg)','Longitude(deg)','Radius(m)']); headerParsed = true; continue; }
+            if (!line) continue;
+            const cols = Utils.splitCsvSimple(line);
+            const id = (cols[idx['Id']] ?? '').trim();
+            const ts = Number(cols[idx['TimeStamp(ms)']]); if (!Number.isFinite(ts) || ts < minTs || ts > maxTs) continue;
+            rows.push({ 'TimeStamp(ms)': ts, Id: id, 'Latitude(deg)': Number(cols[idx['Latitude(deg)']]), 'Longitude(deg)': Number(cols[idx['Longitude(deg)']]), 'Radius(m)': Number(cols[idx['Radius(m)']]) });
+          }
+          return rows;
+        }
+      };
+
+      // Visualization
+      const Vis = {
+        drawHopLines(viewer, hops, positionRows, deviceColor) {
+          const index = Utils.buildIndexById(positionRows);
+          const findNearest = Utils.makeNearestFinder(index, 100);
+          // Sort hops by timestamp and skip the last one
+          const sortedHops = hops.slice().sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
+          const hopsToProcess = sortedHops.slice(0, -1); // Remove last hop
+          
+          for (const h of hopsToProcess) {
+            const t = Number(h['TimeStamp(ms)']);
+            const fromId = String(h.FromDevice ?? '').trim();
+            const toId   = String(h.ToDevice   ?? '').trim();
+            if (!Number.isFinite(t) || !fromId || !toId) continue;
+            const pFrom = findNearest(fromId, t); const pTo = findNearest(toId, t);
+            if (!pFrom || !pTo) continue;
+            const lat1 = Number(pFrom['Latitude(deg)']), lon1 = Number(pFrom['Longitude(deg)']), r1 = Number(pFrom['Radius(m)']);
+            const lat2 = Number(pTo['Latitude(deg)']),   lon2 = Number(pTo['Longitude(deg)']),   r2 = Number(pTo['Radius(m)']);
+            if (![lat1, lon1, r1, lat2, lon2, r2].every(Number.isFinite)) continue;
+            const h1 = Utils.heightFromGeocentricRadius(lat1, r1);
+            const h2 = Utils.heightFromGeocentricRadius(lat2, r2);
+            viewer.entities.add({
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights([lon1, lat1, h1, lon2, lat2, h2]),
+                width: 2.0,
+                material: new Cesium.PolylineOutlineMaterialProperty({
+                  color: Cesium.Color.fromAlpha(deviceColor[fromId] ?? Cesium.Color.CYAN, 0.9),
+                  outlineWidth: 1, outlineColor: Cesium.Color.BLACK
+                }),
+                arcType: Cesium.ArcType.NONE
+              }
+            });
+          }
+        },
+        drawHopChain(viewer, hops, positionRows) {
+          const index = Utils.buildIndexById(positionRows);
+          const findNearest = Utils.makeNearestFinder(index, 500);
+          // Sort hops by timestamp and skip the last one (same as drawHopLines)
+          const sortedHops = hops.slice().sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
+          const hopsToProcess = sortedHops.slice(0, -1); // Remove last hop
+          
+          const chain = []; let lastKey = null;
+          for (const h of hopsToProcess) {
+            const t = Number(h['TimeStamp(ms)']);
+            const seq = [String(h.FromDevice ?? '').trim(), String(h.ToDevice ?? '').trim()];
+            for (const id of seq) {
+              if (!id) continue;
+              const pos = findNearest(id, t); if (!pos) continue;
+              const lat = Number(pos['Latitude(deg)']); const lon = Number(pos['Longitude(deg)']); const r = Number(pos['Radius(m)']);
+              if (![lat,lon,r].every(Number.isFinite)) continue;
+              const ht = Utils.heightFromGeocentricRadius(lat, r);
+              const key = `${id}@${Math.round(Number(pos['TimeStamp(ms)'])/50)}`;
+              if (key !== lastKey) { chain.push(lon, lat, ht); lastKey = key; }
+            }
+          }
+          if (chain.length >= 6) {
+            viewer.entities.add({
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights(chain), width: 3.0,
+                material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.MAGENTA.withAlpha(0.9), dashLength: 16 }),
+                arcType: Cesium.ArcType.NONE
+              }
+            });
+          }
+        },
+        drawSatelliteTopology(viewer, positionRows, topology, minTs, maxTs) {
+          if (!topology || topology.length === 0) {
+            console.log('No topology to draw');
+            return;
+          }
+          
+          const index = Utils.buildIndexById(positionRows);
+          const findNearest = Utils.makeNearestFinder(index, 1000);
+          const midTime = (minTs + maxTs) / 2;
+          
+          console.log(`Drawing topology: ${topology.length} links, midTime: ${midTime}, available satellites: ${index.size}`);
+          
+          let drawnLinks = 0;
+          let missingPositions = [];
+          const drawnSatellites = new Set(); // Track drawn satellite nodes
+          
+          for (const link of topology) {
+            const sat1 = link.firstSatellite;
+            const sat2 = link.secondSatellite;
+            
+            const pos1 = findNearest(sat1, midTime);
+            const pos2 = findNearest(sat2, midTime);
+            
+            if (!pos1 || !pos2) {
+              if (!pos1) missingPositions.push(sat1);
+              if (!pos2) missingPositions.push(sat2);
+              continue;
+            }
+            
+            const lat1 = Number(pos1['Latitude(deg)']); const lon1 = Number(pos1['Longitude(deg)']); const r1 = Number(pos1['Radius(m)']);
+            const lat2 = Number(pos2['Latitude(deg)']); const lon2 = Number(pos2['Longitude(deg)']); const r2 = Number(pos2['Radius(m)']);
+            
+            if (![lat1, lon1, r1, lat2, lon2, r2].every(Number.isFinite)) {
+              console.log('Invalid coordinates for link:', { sat1, sat2, pos1, pos2 });
+              continue;
+            }
+            
+            const h1 = Utils.heightFromGeocentricRadius(lat1, r1);
+            const h2 = Utils.heightFromGeocentricRadius(lat2, r2);
+            
+            // Draw connection lines
+            viewer.entities.add({
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights([lon1, lat1, h1, lon2, lat2, h2]),
+                width: 2.0,
+                material: new Cesium.PolylineOutlineMaterialProperty({
+                  color: Cesium.Color.GRAY.withAlpha(0.6),
+                  outlineWidth: 1,
+                  outlineColor: Cesium.Color.DARKGRAY
+                }),
+                arcType: Cesium.ArcType.NONE
+              }
+            });
+            
+            // Draw green satellite nodes (avoid duplicate drawing)
+            if (!drawnSatellites.has(sat1)) {
+              viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(lon1, lat1, h1),
+                point: {
+                  pixelSize: 8,
+                  color: Cesium.Color.LIME,
+                  outlineColor: Cesium.Color.DARKGREEN,
+                  outlineWidth: 2,
+                  heightReference: Cesium.HeightReference.NONE
+                },
+                label: {
+                  text: sat1,
+                  font: '10px sans-serif',
+                  pixelOffset: new Cesium.Cartesian2(0, -25),
+                  fillColor: Cesium.Color.LIME,
+                  showBackground: true,
+                  backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
+                  show: false, // Default hidden, show when clicked
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY
+                },
+                description: `
+                  <div style="font-family: Arial, sans-serif; color: #333;">
+                    <h3 style="margin: 0 0 10px 0; color: #2e7d32;">Satellite Node Information</h3>
+                    <table style="border-collapse: collapse; width: 100%;">
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Satellite Name:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${sat1}</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Latitude:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${lat1.toFixed(6)}°</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Longitude:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${lon1.toFixed(6)}°</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Radius:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${r1.toFixed(0)} m</td></tr>
+                      <tr><td style="padding: 4px;"><b>Height:</b></td><td style="padding: 4px;">${h1.toFixed(0)} m</td></tr>
+                    </table>
+                  </div>`
+              });
+              drawnSatellites.add(sat1);
+            }
+            
+            if (!drawnSatellites.has(sat2)) {
+              viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(lon2, lat2, h2),
+                point: {
+                  pixelSize: 8,
+                  color: Cesium.Color.LIME,
+                  outlineColor: Cesium.Color.DARKGREEN,
+                  outlineWidth: 2,
+                  heightReference: Cesium.HeightReference.NONE
+                },
+                label: {
+                  text: sat2,
+                  font: '10px sans-serif',
+                  pixelOffset: new Cesium.Cartesian2(0, -25),
+                  fillColor: Cesium.Color.LIME,
+                  showBackground: true,
+                  backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
+                  show: false, // Default hidden, show when clicked
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY
+                },
+                description: `
+                  <div style="font-family: Arial, sans-serif; color: #333;">
+                    <h3 style="margin: 0 0 10px 0; color: #2e7d32;">Satellite Node Information</h3>
+                    <table style="border-collapse: collapse; width: 100%;">
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Satellite Name:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${sat2}</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Latitude:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${lat2.toFixed(6)}°</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Longitude:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${lon2.toFixed(6)}°</td></tr>
+                      <tr><td style="padding: 4px; border-bottom: 1px solid #ddd;"><b>Radius:</b></td><td style="padding: 4px; border-bottom: 1px solid #ddd;">${r2.toFixed(0)} m</td></tr>
+                      <tr><td style="padding: 4px;"><b>Height:</b></td><td style="padding: 4px;">${h2.toFixed(0)} m</td></tr>
+                    </table>
+                  </div>`
+              });
+              drawnSatellites.add(sat2);
+            }
+            
+            drawnLinks++;
+          }
+          
+          console.log(`Successfully drew ${drawnLinks} topology links and ${drawnSatellites.size} satellite nodes`);
+          if (missingPositions.length > 0) {
+            console.log(`Missing positions for ${missingPositions.length} satellites:`, missingPositions.slice(0, 10));
+          }
+        }
+      };
+
+      // Grid Plus Topology Generator (integrated from gridplus.js)
+      const GridPlus = {
+        generateGridPlus(numberOfOrbits, numberOfSatellitesPerOrbit, constellationName) {
+          const gridPlus = new Array(4 * numberOfOrbits * numberOfSatellitesPerOrbit);
+          for (let orbit = 0; orbit < numberOfOrbits; orbit++) {
+            const orbitOnLeft = (orbit + numberOfOrbits - 1) % numberOfOrbits;
+            const orbitOnRight = (orbit + 1) % numberOfOrbits;
+            for (let satellite = 0; satellite < numberOfSatellitesPerOrbit; satellite++) {
+              const nextIdInOrbit = (satellite + 1) % numberOfSatellitesPerOrbit;
+              const previousIdInOrbit = (satellite + numberOfSatellitesPerOrbit - 1) % numberOfSatellitesPerOrbit;
+              const baseIndex = 4 * (orbit * numberOfSatellitesPerOrbit + satellite);
+              gridPlus[baseIndex] = {
+                firstSatellite: `${constellationName}-${orbit}-${satellite}`,
+                secondSatellite: `${constellationName}-${orbit}-${nextIdInOrbit}`
+              };
+              gridPlus[baseIndex + 1] = {
+                firstSatellite: `${constellationName}-${orbit}-${satellite}`,
+                secondSatellite: `${constellationName}-${orbit}-${previousIdInOrbit}`
+              };
+              gridPlus[baseIndex + 2] = {
+                firstSatellite: `${constellationName}-${orbit}-${satellite}`,
+                secondSatellite: `${constellationName}-${orbitOnLeft}-${satellite}`
+              };
+              gridPlus[baseIndex + 3] = {
+                firstSatellite: `${constellationName}-${orbit}-${satellite}`,
+                secondSatellite: `${constellationName}-${orbitOnRight}-${satellite}`
+              };
+            }
+          }
+          return gridPlus;
+        }
+      };
+
+      return { Utils, Data, Vis, GridPlus };
+    })();
+
+    // Init Cesium Viewer with InfoBox enabled for satellite information display
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrain: Cesium.Terrain.fromWorldTerrain(),
+      timeline: false, animation: false, geocoder: false, baseLayerPicker: true,
+      sceneModePicker: true, navigationHelpButton: false, selectionIndicator: true,
+      infoBox: true // Enable InfoBox to show satellite details
+    });
+
+    // Add click event handler to show satellite node information
+    viewer.cesiumWidget.screenSpaceEventHandler.setInputAction(function(click) {
+      const pickedObject = viewer.scene.pick(click.position);
+      if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id)) {
+        const entity = pickedObject.id;
+        // Check if it's a satellite topology node (has green point)
+        if (entity.point && entity.point.color.getValue().equals(Cesium.Color.LIME)) {
+          // Show the entity's information in the InfoBox
+          viewer.selectedEntity = entity;
+          
+          // Also show the label
+          if (entity.label) {
+            entity.label.show = true;
+            
+            // Hide all other satellite node labels
+            viewer.entities.values.forEach(otherEntity => {
+              if (otherEntity !== entity && 
+                  otherEntity.point && 
+                  otherEntity.label && 
+                  otherEntity.point.color.getValue().equals(Cesium.Color.LIME)) {
+                otherEntity.label.show = false;
+              }
+            });
+          }
+        }
+      } else {
+        // If clicking on empty space, hide all satellite labels and deselect
+        viewer.selectedEntity = undefined;
+        viewer.entities.values.forEach(entity => {
+          if (entity.point && 
+              entity.label && 
+              entity.point.color.getValue().equals(Cesium.Color.LIME)) {
+            entity.label.show = false;
+          }
+        });
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    // Global satellite topology storage
+    let currentTopology = null;
+    let showTopology = true; // Control whether to display topology
+    
+    // Global variables to store topology-related data, avoid repeated loading
+    let lastMinTs = null, lastMaxTs = null, lastPositionRows = null;
+
+    // Keep original entry function name for UI compatibility
+    async function visualizePacket(packetId) {
+      const status = document.getElementById('statusMsg');
+      const packetFile = document.getElementById('packetFile').files[0];
+      const positionFile = document.getElementById('positionFile').files[0];
+
+      if (!packetId || String(packetId).trim() === '') {
+        status.textContent = 'Enter PacketId.';
+        document.getElementById('resultDisplay').textContent = 'Please enter PacketId';
+        return;
+      }
+      if (!packetFile || !positionFile) {
+        status.textContent = 'Please select summary.csv and position.csv first.';
+        document.getElementById('resultDisplay').textContent = 'Please select summary.csv and position.csv files';
+        return;
+      }
+
+      viewer.entities.removeAll();
+      
+      // Auto-generate topology (if not already generated)
+      if (!currentTopology) {
+        const numberOfOrbits = parseInt(document.getElementById('numberOfOrbits').value) || 72;
+        const numberOfSatellitesPerOrbit = parseInt(document.getElementById('numberOfSatellitesPerOrbit').value) || 22;
+        const constellationName = document.getElementById('constellationName').value.trim() || 'Starlink';
+        
+        console.log('Auto-generating topology:', { numberOfOrbits, numberOfSatellitesPerOrbit, constellationName });
+        currentTopology = App.GridPlus.generateGridPlus(numberOfOrbits, numberOfSatellitesPerOrbit, constellationName);
+      }
+      
+      let packetRows, positionRows; let posWindowMin, posWindowMax;
+      try {
+        status.textContent = 'loading CSV… (packet)';
+        const { hops, deviceSet, minTs, maxTs } = await App.Data.extractHopsFromPacketFile(packetFile, packetId);
+        packetRows = hops;
+        if (hops.length === 0) { 
+          status.textContent = `Cannot find record for PacketId = ${packetId}.`;
+          document.getElementById('resultDisplay').textContent = `Can not find PacketId = ${packetId}`;
+          return; 
+        }
+        posWindowMin = Math.floor(minTs / 1000) * 1000;
+        posWindowMax = Math.ceil (maxTs / 1000) * 1000;
+        status.textContent = 'loading CSV… (position filtered)';
+        positionRows = await App.Data.extractPositionsInRange(positionFile, deviceSet, posWindowMin, posWindowMax);
+        
+        // Load all positions for topology if topology exists
+        if (currentTopology && currentTopology.length > 0) {
+          status.textContent = 'loading CSV… (all positions for topology)';
+          console.log('Loading all positions for topology visualization');
+          const allPositions = await App.Data.extractAllPositionsInRange(positionFile, posWindowMin, posWindowMax);
+          console.log(`Loaded ${allPositions.length} total positions, existing: ${positionRows.length}`);
+          
+          // Merge with existing positionRows
+          const existingKeys = new Set(positionRows.map(r => `${r.Id}_${r['TimeStamp(ms)']}`));
+          let addedCount = 0;
+          for (const pos of allPositions) {
+            const key = `${pos.Id}_${pos['TimeStamp(ms)']}`;
+            if (!existingKeys.has(key)) {
+              positionRows.push(pos);
+              addedCount++;
+            }
+          }
+          console.log(`Added ${addedCount} additional positions for topology`);
+        }
+        status.textContent = '';
+      } catch (e) { 
+        console.error(e); 
+        status.textContent = 'Failed to load CSV. Please check selected files.';
+        document.getElementById('resultDisplay').textContent = 'CSV file loading failed, please check the selected files';
+        return; 
+      }
+
+      const hops = packetRows.filter(r => String(r.PacketId).trim() === String(packetId).trim());
+      if (hops.length === 0) { 
+        status.textContent = `Cannot find record for PacketId = ${packetId}.`;
+        document.getElementById('resultDisplay').textContent = `Can not find PacketId = ${packetId}`;
+        return; 
+      }
+
+      const tsArr = hops.map(r => Number(r['TimeStamp(ms)'])).filter(Number.isFinite);
+      const minTs = Math.min(...tsArr), maxTs = Math.max(...tsArr);
+
+      const deviceSet = new Set();
+      for (const h of hops) { if (h.FromDevice) deviceSet.add(String(h.FromDevice).trim()); if (h.ToDevice) deviceSet.add(String(h.ToDevice).trim()); }
+
+      // packet timestamps per device (sorted)
+      const devToPacketTs = new Map();
+      for (const h of hops) {
+        const t = Number(h['TimeStamp(ms)']); const f = String(h.FromDevice ?? '').trim(); const to = String(h.ToDevice ?? '').trim();
+        if (Number.isFinite(t)) {
+          if (f) { if (!devToPacketTs.has(f)) devToPacketTs.set(f, []); devToPacketTs.get(f).push(t); }
+          if (to){ if (!devToPacketTs.has(to)) devToPacketTs.set(to, []); devToPacketTs.get(to).push(t); }
+        }
+      }
+      for (const arr of devToPacketTs.values()) arr.sort((a,b)=>a-b);
+      const nearestPacketTsForDevice = (deviceId, target, maxDeltaMs = 1000) => App.Utils.nearestInSorted(devToPacketTs.get(deviceId), target, maxDeltaMs);
+
+      const posCandidates = positionRows.filter(r => {
+        const id = String(r.Id ?? r.ID ?? '').trim(); if (!deviceSet.has(id)) return false;
+        const t = Number(r['TimeStamp(ms)']); return Number.isFinite(t) && t >= posWindowMin && t <= posWindowMax;
+      });
+      if (posCandidates.length === 0) { 
+        status.textContent = `No position data found for devices in time range ${posWindowMin} ~ ${posWindowMax}.`;
+        document.getElementById('resultDisplay').textContent = `Can not find position data for devices in time range ${posWindowMin} ~ ${posWindowMax}.`;
+        return; 
+      }
+
+      const deviceColor = {}; Array.from(deviceSet).forEach(id => { deviceColor[id] = Cesium.Color.fromRandom({ alpha: 1.0 }); });
+      const devicePacketCenter = {}; for (const [dev, arr] of devToPacketTs.entries()) { devicePacketCenter[dev] = arr.reduce((a,b)=>a+b,0) / arr.length; }
+
+      const bestPosById = new Map();
+      for (const p of posCandidates) {
+        const id = String(p.Id ?? p.ID ?? '').trim(); const t = Number(p['TimeStamp(ms)']);
+        const target = devicePacketCenter[id] ?? ((posWindowMin + posWindowMax) / 2);
+        const cur = bestPosById.get(id);
+        if (!cur || Math.abs(t - target) < Math.abs(cur._t - target)) { p._t = t; bestPosById.set(id, p); }
+      }
+      const finalPoints = Array.from(bestPosById.values());
+
+      const created = [];
+      for (const p of finalPoints) {
+        const id = String(p.Id ?? p.ID ?? '').trim();
+        const lat = Number(p['Latitude(deg)']); const lon = Number(p['Longitude(deg)']); const radius = Number(p['Radius(m)']); const ts = Number(p['TimeStamp(ms)']);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const height = Number.isFinite(radius) ? App.Utils.heightFromGeocentricRadius(lat, radius) : 0;
+        const shownTs = nearestPacketTsForDevice(id, ts) ?? ts;
+        const entity = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+          point: { pixelSize: 10, color: deviceColor[id], outlineColor: Cesium.Color.WHITE, outlineWidth: 1.5 },
+          label: {
+            text: `${id}\n${shownTs}`, font: '12px sans-serif', pixelOffset: new Cesium.Cartesian2(0, -18),
+            fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromAlpha(deviceColor[id], 0.6),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          },
+          description: `
+            <table>
+              <tr><td><b>Device</b></td><td>${id}</td></tr>
+              <tr><td><b>TimeStamp(ms)</b></td><td>${shownTs}</td></tr>
+              <tr><td><b>Latitude(deg)</b></td><td>${lat}</td></tr>
+              <tr><td><b>Longitude(deg)</b></td><td>${lon}</td></tr>
+              <tr><td><b>Radius(m)</b></td><td>${radius}</td></tr>
+              <tr><td><b>Height above WGS84 (m)</b></td><td>${height.toFixed(2)}</td></tr>
+            </table>`
+        });
+        created.push(entity);
+      }
+
+      if (created.length > 0) await viewer.zoomTo(viewer.entities);
+      App.Vis.drawHopLines(viewer, hops, positionRows, deviceColor);
+      App.Vis.drawHopChain(viewer, hops, positionRows);
+      
+      // Save topology-related data for later use
+      lastMinTs = minTs;
+      lastMaxTs = maxTs;
+      lastPositionRows = positionRows;
+      
+      // Draw satellite topology if available and enabled
+      if (showTopology && currentTopology && currentTopology.length > 0) {
+        console.log('Drawing topology with', positionRows.length, 'positions');
+        App.Vis.drawSatelliteTopology(viewer, positionRows, currentTopology, minTs, maxTs);
+      }
+
+      const devicesPath = (() => {
+        const sorted = hops.slice().sort((a,b)=>Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
+        const seen = new Set(); const list = [];
+        for (const h of sorted) { const f = String(h.FromDevice ?? '').trim(); const t = String(h.ToDevice ?? '').trim();
+          if (f && !seen.has(f)) { list.push(f); seen.add(f); }
+          if (t && !seen.has(t)) { list.push(t); seen.add(t); }
+        }
+        return list;
+      })();
+      // Save result text for later use
+      window.lastResultText = `Result: PacketId= ${packetId}, Time period: ${minTs} ~ ${maxTs}, Total hops: ${created.length-1}, Device path: ${devicesPath.length ? devicesPath.join(' → ') : 'N/A'}`;
+      status.textContent = '';
+      
+      // Update result display
+      updateResultDisplay();
+    }
+
+    // Helper function to update result display
+    function updateResultDisplay() {
+      let displayText = window.lastResultText || 'Please select CSV files and enter PacketId';
+      
+      if (currentTopology && currentTopology.length > 0) {
+        const constellationName = document.getElementById('constellationName').value || 'Starlink';
+        const numberOfOrbits = document.getElementById('numberOfOrbits').value || 72;
+        const numberOfSatellitesPerOrbit = document.getElementById('numberOfSatellitesPerOrbit').value || 22;
+        const topologyStatus = showTopology ? 'Visible' : 'Hidden';
+        const topologyInfo = `Topology: ${constellationName} (${numberOfOrbits}×${numberOfSatellitesPerOrbit}) ${currentTopology.length} links [${topologyStatus}]`;
+        displayText = `${topologyInfo}\n${displayText}`;
+      }
+      
+      document.getElementById('resultDisplay').textContent = displayText;
+    }
+
+    // Toggle topology visibility
+    function toggleTopology() {
+      showTopology = !showTopology;
+      const btn = document.getElementById('toggleTopologyBtn');
+      
+      if (showTopology) {
+        btn.textContent = 'Show Topology: ON';
+        btn.style.background = '#28a745'; // Green
+        
+        // Directly redisplay stored topology entities without reloading data
+        if (currentTopology && lastPositionRows && lastMinTs !== null && lastMaxTs !== null) {
+          console.log('Restoring topology from cache');
+          App.Vis.drawSatelliteTopology(viewer, lastPositionRows, currentTopology, lastMinTs, lastMaxTs);
+        }
+        
+        // Update result display (add back topology information)
+        updateResultDisplay();
+      } else {
+        btn.textContent = 'Show Topology: OFF';
+        btn.style.background = '#dc3545'; // Red
+        
+        // Only remove topology-related entities, not reload the entire scene
+        const entitiesToRemove = [];
+        viewer.entities.values.forEach(entity => {
+          // Remove gray topology connections
+          if (entity.polyline && 
+              entity.polyline.material && 
+              entity.polyline.material.color && 
+              entity.polyline.material.color.getValue().equals(Cesium.Color.GRAY.withAlpha(0.6))) {
+            entitiesToRemove.push(entity);
+          }
+          // Remove green satellite nodes
+          else if (entity.point && 
+                   entity.label && 
+                   entity.point.color.getValue().equals(Cesium.Color.LIME)) {
+            entitiesToRemove.push(entity);
+          }
+        });
+        
+        // Actually remove topology entities
+        entitiesToRemove.forEach(entity => {
+          viewer.entities.remove(entity);
+        });
+        
+        // Update result display
+        updateResultDisplay();
+      }
+    }
+
+    // UI wiring
+    const input = document.getElementById('packetInput');
+    const btn = document.getElementById('searchBtn');
+    const toggleTopologyBtn = document.getElementById('toggleTopologyBtn');
+    
+    btn.addEventListener('click', () => visualizePacket(input.value));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') visualizePacket(input.value); });
+    toggleTopologyBtn.addEventListener('click', toggleTopology);
+
+  </script>
+</body>
+</html>
