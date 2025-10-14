@@ -18,9 +18,6 @@ def read_distance_file(filename):
     splited_filename = filename[:-4].split("#")
     if len(splited_filename) != 5:
         raise NameError("Incorrect distance file name format!")
-    splited_filename = filename[:-4].split("#")
-    if len(splited_filename) != 5:
-        raise NameError("Incorrect distance file name format!")
 
     if splited_filename[0] != "Distances" and splited_filename[0] != "ConsistentDistances":
         raise NameError("Only distances or consistent distances files are accepted, and they start with 'Distances' or 'ConsistentDistances'!")

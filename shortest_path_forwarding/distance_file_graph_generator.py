@@ -49,8 +49,8 @@ class GraphLinkFilter:
         self.graph_builder = graph_builder
         self.number_of_nodes = number_of_nodes
 
-    def is_satellite_id(self, satellite_id):
-        splitted_name = satellite_id.split("-")
+    def is_satellite_id(self, id):
+        splitted_name = id.split("-")
         if len(splitted_name) == 3 and splitted_name[0] == self.constellation_name:
             return True
         return False
