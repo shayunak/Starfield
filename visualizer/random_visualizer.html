@@ -453,11 +453,21 @@
           });
         }
 
-        // Draw hop lines
+        // Draw hop lines (skip the last hop for any packet)
+        // Sort hops by timestamp to identify the last one
+        const sortedHopsForLast = hops.slice().sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
+        const lastHop = sortedHopsForLast.length > 0 ? sortedHopsForLast[sortedHopsForLast.length - 1] : null;
+        
         for (const hop of hops) {
           const fromPos = devicePositions.get(hop.FromDevice);
           const toPos = devicePositions.get(hop.ToDevice);
           if (!fromPos || !toPos) continue;
+
+          // Skip the last hop (by timestamp)
+          if (lastHop && hop['TimeStamp(ms)'] === lastHop['TimeStamp(ms)'] && 
+              hop.FromDevice === lastHop.FromDevice && hop.ToDevice === lastHop.ToDevice) {
+            continue;
+          }
 
           drawPolyline(
             [fromPos.position, toPos.position],
@@ -469,9 +479,8 @@
           );
         }
 
-        // Draw hop chain
+        // Prepare device path for info display
         const sortedHops = hops.slice().sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
-        const chainPositions = [];
         const seen = new Set();
 
         for (const hop of sortedHops) {
@@ -479,22 +488,9 @@
             if (!deviceId || seen.has(deviceId)) continue;
             const devicePos = devicePositions.get(deviceId);
             if (devicePos) {
-              chainPositions.push(devicePos.position);
               seen.add(deviceId);
             }
           }
-        }
-
-        //draw packetid hop chain polyline can change to straight line
-        if (chainPositions.length >= 2) {
-          drawPolyline(
-            chainPositions,
-            new Cesium.PolylineDashMaterialProperty({
-              color: Cesium.Color.MAGENTA.withAlpha(0.9),
-              dashLength: 16
-            }),
-            3.0
-          );
         }
 
         if (devicePositions.size > 0) {
