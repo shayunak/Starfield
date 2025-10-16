@@ -28,8 +28,9 @@ def save_dynamic_topology_to_file(graphs, nodes, filename):
                     for neighbor in graph.neighbors(node):
                         writer.writerow([time, node, neighbor])
         else:
+            time, graph = graphs[0]
             for node in nodes:
-                for neighbor in graphs[0].neighbors(node):
+                for neighbor in graph.neighbors(node):
                     writer.writerow([node, neighbor])
     print(f"Topology saved to {filename}")
 
@@ -109,7 +110,7 @@ def riemannian_fields(cartesian_positions_file, source, destination, time_period
         fields = rmtg.calculate_fields_at_satellites(satellite_nodes, satellite_position, ground_station_position, source, destination, 10.0**7)
         fields_over_time[time_stamp] = fields
 
-    filename = f"RiemannianFields#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites})#{time_period}s(every){time_interval}s.csv"
+    filename = f"RiemannianFields#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites})#({source},{destination})#{time_period}s(every){time_interval}s.csv"
     save_fields_to_file(fields_over_time, f'./generated/{filename}')
 
 def riemannian_static_topology(distance_file, cartesian_positions_file, num_isls):

@@ -142,6 +142,7 @@ func startSphericalPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
 			logger.DeleteSphericalPositionsDevice(chosen)
+			continue
 		}
 		positionUpdateMessage := value.Interface().(UpdateSphericalPositionMessage)
 		logger.addNewSphericalPositionEntry(positionUpdateMessage)
@@ -157,6 +158,7 @@ func startCartesianPositionsLogger(logger ILogger, wg *sync.WaitGroup) {
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
 			logger.DeleteCartesianPositionsDevice(chosen)
+			continue
 		}
 		positionUpdateMessage := value.Interface().(UpdateCartesianPositionMessage)
 		logger.addNewCartesianPositionEntry(positionUpdateMessage)
@@ -309,6 +311,7 @@ func startDistancesLogger(logger ILogger, wg *sync.WaitGroup) {
 		chosen, value, ok := reflect.Select(selectSatellitesCases)
 		if !ok {
 			logger.DeleteDistancesDevice(chosen)
+			continue
 		}
 		distanceUpdateMessage := value.Interface().(UpdateDistancesMessage)
 		logger.addNewDistanceEntries(distanceUpdateMessage)

@@ -1,7 +1,7 @@
 import csv
+import time
 import numpy as np
 import networkx as nx
-import pandas as pd
 
 K = 10**8 # Field constant coefficient
 
@@ -50,6 +50,8 @@ def scale_ground_stations_to_shell(ground_station_positions, shell_radius):
     scaled_positions = {}
     for device_id, position in ground_station_positions.items():
         r = np.linalg.norm(position)
+        if r == 0:
+            raise ValueError("Ground station position cannot be at the origin!")
         scaling_factor = shell_radius / r
         scaled_positions[device_id] = scaling_factor * position
 
@@ -83,24 +85,35 @@ def mirror_sat_to_base_plane(base_sat_pos, other_sat_pos):
     scaling_factor = (np.linalg.norm(base_sat_pos) ** 2) / np.dot(base_sat_pos, other_sat_pos)
     return scaling_factor * other_sat_pos
 
-def calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, field):
-    perp_field_dir_unnorm = np.cross(field, base_sat_pos)
-    perp_field_dir = perp_field_dir_unnorm / np.linalg.norm(perp_field_dir_unnorm)
-    perp_field = np.linalg.norm(field) * perp_field_dir
-
+def calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, perp_field):
     mirrored_on_plane_other_sat_pos = mirror_sat_to_base_plane(base_sat_pos, other_sat_pos)
     inter_sat_vector = mirrored_on_plane_other_sat_pos - base_sat_pos
 
     return np.sqrt(np.abs(np.dot(inter_sat_vector, perp_field)))
 
-def calculate_riemannian_distance(base_sat_pos, other_sat_pos, ground_station_positions, traffic_flows):
+def calculate_riemannian_distance(base_sat_pos, other_sat_pos, perp_fields):
     total_distance = 0.0
-    for source, dest, strength in traffic_flows:
-        field = calculate_field(base_sat_pos, ground_station_positions[source], ground_station_positions[dest], strength)
-        riemannian_distance = calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, field)
+    for perp_field in perp_fields:
+        riemannian_distance = calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, perp_field)
         total_distance += riemannian_distance
 
     return total_distance
+
+def calculate_perp_field(sat_pos, field):
+    perp_field_dir_unnorm = np.cross(field, sat_pos)
+    perp_field_dir = perp_field_dir_unnorm / np.linalg.norm(perp_field_dir_unnorm)
+    perp_field = np.linalg.norm(field) * perp_field_dir
+
+    return perp_field
+
+def calculate_per_flow_perp_field(base_sat_pos, ground_station_positions, traffic_flows):
+    flows_fields_perp = []
+    for source, dest, strength in traffic_flows:
+        field = calculate_field(base_sat_pos, ground_station_positions[source], ground_station_positions[dest], strength)
+        perp_field = calculate_perp_field(base_sat_pos, field)
+        flows_fields_perp.append(perp_field)
+
+    return flows_fields_perp
 
 def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_station_positions, source, dest, strength):
     fields = {
@@ -151,11 +164,14 @@ def generate_riemannian_dynamic_topology(
     closest_satellites = {}
     for base_sat in satellite_nodes:
         distance_list = []
+        time_start = time.time()
+        base_perp_fields = calculate_per_flow_perp_field(satellite_positions[base_sat], scaled_ground_station_positions, traffic_flow)
         for other_sat in consistent_distance_graph[base_sat]:
-            distance = calculate_riemannian_distance(satellite_positions[base_sat], satellite_positions[other_sat], scaled_ground_station_positions, traffic_flow)
+            distance = calculate_riemannian_distance(satellite_positions[base_sat], satellite_positions[other_sat], base_perp_fields)
             distance_list.append((other_sat, distance))
         distance_list.sort(key=lambda x: x[1])
         closest_satellites[base_sat] = [sat for sat, _ in distance_list]
+        print(f"Base: {base_sat}, Closest: {closest_satellites[base_sat][0]}, Time taken: {time.time() - time_start:.2f} seconds")
 
     num_isl_perp = num_isls // 4 
     for i in range(num_isl_perp):
