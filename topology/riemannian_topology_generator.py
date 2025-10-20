@@ -120,7 +120,8 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
         "Satellite": [],
         "Field_X": [],
         "Field_Y": [],
-        "Field_Z": []
+        "Field_Z": [],
+        "Field_Magnitude": []
     }
     
     shell_radius = np.linalg.norm(list(satellite_positions.values())[0])
@@ -128,11 +129,17 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
 
     for sat in satellite_nodes:
         field = calculate_field(satellite_positions[sat], scaled_ground_station_positions[source], scaled_ground_station_positions[dest], strength)
-        field = field / np.linalg.norm(field)  # Normalize the field vector
+        field_magnitude = np.linalg.norm(field)  # Normalize the field vector
+        field = field / field_magnitude
         fields["Satellite"].append(sat)
         fields["Field_X"].append(field[0])
         fields["Field_Y"].append(field[1])
         fields["Field_Z"].append(field[2])
+        fields["Field_Magnitude"].append(field_magnitude)
+
+    #Normalized Magnitude
+    max_mag = max(fields["Field_Magnitude"])
+    fields["Field_Magnitude"] = [mag / max_mag for mag in fields["Field_Magnitude"]]
 
     return fields
 

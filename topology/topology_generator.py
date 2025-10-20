@@ -38,9 +38,9 @@ def save_fields_to_file(fields, filename):
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
         if len(fields) > 1:
-            writer.writerow(['Timestamp', 'Satellite', 'Field_X', 'Field_Y', 'Field_Z'])
+            writer.writerow(['Timestamp', 'Satellite', 'Field_X', 'Field_Y', 'Field_Z', 'Field_Magnitude'])
         else:
-            writer.writerow(['Satellite', 'Field_X', 'Field_Y', 'Field_Z'])
+            writer.writerow(['Satellite', 'Field_X', 'Field_Y', 'Field_Z', 'Field_Magnitude'])
         if len(fields) > 1:
             for time, field_data in fields:
                 for i in range(len(field_data["Satellite"])):
@@ -49,7 +49,8 @@ def save_fields_to_file(fields, filename):
                         field_data["Satellite"][i],
                         field_data["Field_X"][i],
                         field_data["Field_Y"][i],
-                        field_data["Field_Z"][i]
+                        field_data["Field_Z"][i],
+                        field_data["Field_Magnitude"][i]
                     ])
         else:
             field_data = fields[0]
@@ -58,7 +59,8 @@ def save_fields_to_file(fields, filename):
                     field_data["Satellite"][i],
                     field_data["Field_X"][i],
                     field_data["Field_Y"][i],
-                    field_data["Field_Z"][i]
+                    field_data["Field_Z"][i],
+                    field_data["Field_Magnitude"][i]
                 ])
     print(f"Fields saved to {filename}")
 

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cesium Satellite Position Visualization (Time Range)</title>
+  
+  <!-- CesiumJS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  
+  <!-- PapaParse: CSV Parser -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  
+  <style>
+    html, body, #cesiumContainer { 
+      width: 100%; 
+      height: 100%; 
+      margin: 0; 
+      padding: 0; 
+      overflow: hidden; 
+    }
+
+    /* =========================
+       SLIDING MENU STYLES
+    ==========================*/
+    .side-menu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 380px;
+      background: rgba(30,30,30,0.95);
+      color: #fff;
+      padding: 16px;
+      box-sizing: border-box;
+      transform: translateX(-100%);
+      transition: transform 0.35s ease;
+      z-index: 20;
+      overflow-y: auto;
+    }
+
+    .side-menu.open {
+      transform: translateX(0);
+    }
+
+    .toggle-btn {
+      position: absolute;
+      bottom: 30px;
+      left: 16px;
+      background: #47a3ff;
+      color: #001b33;
+      font-size: 15px;
+      font-weight: bold;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      z-index: 25;
+      transition: background 0.25s;
+    }
+    .toggle-btn:hover {
+      background: #5bb3ff;
+    }
+
+    .side-menu input[type="file"],
+    .side-menu input[type="number"] {
+      padding: 6px 8px; 
+      border-radius: 6px; 
+      border: 1px solid rgba(255,255,255,0.3); 
+      background: #222; 
+      color: #fff;
+      font-size: 13px;
+    }
+
+    .side-menu button {
+      padding: 8px 14px; 
+      border-radius: 6px; 
+      border: 0; 
+      background: #47a3ff; 
+      color: #001b33; 
+      font-weight: 600; 
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .side-menu button:disabled {
+      background: #666; 
+      color: #999; 
+      cursor: not-allowed;
+    }
+    .side-menu button:hover:not(:disabled) {
+      background: #5bb3ff;
+    }
+
+    .side-menu small { 
+      opacity: 0.8; 
+      font-size: 12px;
+    }
+    .side-menu label { 
+      font-size: 13px; 
+      font-weight: 500;
+    }
+    .side-menu .info {
+      background: rgba(71, 163, 255, 0.15);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <!-- Toggle Button -->
+  <button id="menuToggle" class="toggle-btn">☰</button>
+
+  <!-- Side Menu -->
+  <div class="side-menu" id="sideMenu">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <label for="positionFile">Position File:</label>
+        <input id="positionFile" type="file" accept=".csv" />
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <label for="fieldFile">Vector Field File:</label>
+        <input id="fieldFile" type="file" accept=".csv" />
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <label for="time">Time (s):</label>
+        <input id="time" type="number" placeholder="e.g. 2" />
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button id="loadBtn" disabled>Display Satellites & Vector Fields</button>
+      </div>
+      <small id="statusMsg">Please select position.csv and field.csv files and enter specific time</small>
+    </div>
+  </div>
+
+  <script type="module" src="field_visualizer.js"></script>
+  <script>
+    const toggleBtn = document.getElementById('menuToggle');
+    const sideMenu = document.getElementById('sideMenu');
+
+    toggleBtn.addEventListener('click', () => {
+      sideMenu.classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
