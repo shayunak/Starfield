@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cesium PacketId Visualization</title>
+
+  <!-- CesiumJS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+  <style>
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+
+    /* =========================
+       SLIDING MENU STYLES
+    ==========================*/
+    .side-menu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 380px;
+      background: rgba(30,30,30,0.95);
+      color: #fff;
+      padding: 16px;
+      box-sizing: border-box;
+      transform: translateX(-100%);
+      transition: transform 0.35s ease;
+      z-index: 20;
+      overflow-y: auto;
+    }
+
+    .side-menu.open {
+      transform: translateX(0);
+    }
+
+    .toggle-btn {
+      position: absolute;
+      bottom: 30px;
+      left: 16px;
+      background: #47a3ff;
+      color: #001b33;
+      font-size: 15px;
+      font-weight: bold;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      z-index: 25;
+      transition: background 0.25s;
+    }
+    .toggle-btn:hover {
+      background: #5bb3ff;
+    }
+
+    /* Better spacing for file input rows */
+    .file-input-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.05);
+      padding: 6px 8px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    /* Label text styling */
+    .file-input-group label {
+      font-size: 13px;
+      opacity: 0.9;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+
+    /* File input styling */
+    .file-input-group input[type="file"] {
+      flex: 1;
+      font-size: 12px;
+      color: #ddd;
+    }
+
+    .file-inputs-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;           
+        margin-bottom: 20px; 
+      }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-group label {
+      font-size: 12px;
+      opacity: 0.9;
+      white-space: nowrap;
+    }
+
+    .input-group input[type="text"] {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: #222;
+      color: #fff;
+    }
+
+    .side-menu input[type="file"] { color: #ddd; }
+
+    .button-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px; /* space between rows */
+    }
+
+    .button-group button {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 0;
+      background: #47a3ff;
+      color: #001b33;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .button-group input[type="checkbox"] {
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+
+    .button-group label {
+      font-size: 12px;
+      opacity: 0.9;
+      white-space: nowrap;
+    }
+
+    .side-menu button {
+      padding: 6px 10px; border-radius: 6px; border: 0; background: #47a3ff; color: #001b33; font-weight: 600; cursor: pointer;
+    }
+    .side-menu small { opacity: 0.8; }
+    .side-menu label { font-size: 12px; opacity: 0.9; }
+    .packet-info {
+      position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 10;
+      background: rgba(0,0,0,0.9); color: #fff; padding: 8px 12px; border-radius: 6px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      font-size: 13px; line-height: 1.4; word-wrap: break-word; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <!-- Toggle Button -->
+  <button id="menuToggle" class="toggle-btn">☰</button>
+
+  <div class="side-menu" id="sideMenu">
+    <div style="display: flex; flex-direction: column; gap: 10px;"></div>
+      <div class="input-group">
+        <label for="packetInput">Packet Id：</label>
+        <input id="packetInput" type="text" placeholder="Enter packetId: for example 12345" />
+      </div>
+
+      <div class="file-inputs-container">
+        <div class="file-input-group">
+          <label for="packetFile">summary file：</label>
+          <input id="packetFile" type="file" accept=".csv" />
+        </div>
+
+        <div class="file-input-group">
+          <label for="positionFile">position file：</label>
+          <input id="positionFile" type="file" accept=".csv" />
+        </div>
+
+        <div class="file-input-group">
+          <label for="topologyFile">topology file：</label>
+          <input id="topologyFile" type="file" accept=".csv" />
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button id="topologyBtn">Show topology</button>
+        <button id="toggleTopologyBtn">Toggle topology</button>
+        <label>
+          <input type="checkbox" id="gridCheckbox">
+          Grid+
+        </label>
+      </div>
+
+      <div class="button-group">
+        <button id="searchBtn">Show packet</button>
+      </div>
+      <small id="statusMsg"></small>
+    </div>
+  </div>
+
+  <div id="packetInfo" class="packet-info"></div>
+
+  <script type="module" src="packet_visualizer.js"></script>
+
+  <script>
+    const toggleBtn = document.getElementById('menuToggle');
+    const sideMenu = document.getElementById('sideMenu');
+
+    toggleBtn.addEventListener('click', () => {
+      sideMenu.classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
