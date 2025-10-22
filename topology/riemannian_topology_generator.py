@@ -157,36 +157,103 @@ def choose_perpendicular_neighbor(base_sat, chosen_sat, sat_positions, neighbors
     
     return min(neighbor_perp_score, key=lambda x: x[1])[0]
 
+def is_edge_valid(base_sat, other_sat, num_isl, topology_graph):
+    if other_sat is None:
+        return False
+    if topology_graph.has_edge(base_sat, other_sat):
+        return False
+    if topology_graph.in_degree(other_sat) >= num_isl // 2:
+        return False
+    return True
+
+def is_edge_valid_undirected(base_sat, other_sat, num_isl, topology_graph):
+    if other_sat is None:
+        return False
+    if topology_graph.has_edge(base_sat, other_sat):
+        return False
+    if topology_graph.degree(other_sat) >= num_isl:
+        return False
+    return True
+
+def find_next_closest(base_sat, closest_satellites, closest_perp_satellites, closest_counter, closest_perp_counter):
+    if closest_counter <= closest_perp_counter:
+        return closest_satellites[base_sat][closest_counter], closest_counter + 1, closest_perp_counter
+    else:
+        return closest_perp_satellites[base_sat][closest_perp_counter], closest_counter, closest_perp_counter + 1
+
+def choose_next_edge(base_sat, closest_satellites, closest_perp_satellites, num_isl, topology_graph, closest_counter, closest_perp_counter):
+    next_sat = None
+    while not is_edge_valid(base_sat, next_sat, num_isl, topology_graph) and closest_perp_counter < len(closest_perp_satellites[base_sat]):
+        next_sat, closest_counter, closest_perp_counter = find_next_closest(base_sat, closest_satellites, closest_perp_satellites, closest_counter, closest_perp_counter)
+
+    if not is_edge_valid(base_sat, next_sat, num_isl, topology_graph):
+        return None, closest_counter, closest_perp_counter
+
+    return next_sat, closest_counter, closest_perp_counter
+
+def choose_next_edge_undirected(base_sat, closest_satellites, closest_perp_satellites, num_isl, topology_graph, closest_counter, closest_perp_counter):
+    next_sat = None
+    while not is_edge_valid_undirected(base_sat, next_sat, num_isl, topology_graph) and closest_perp_counter < len(closest_perp_satellites[base_sat]):
+        next_sat, closest_counter, closest_perp_counter = find_next_closest(base_sat, closest_satellites, closest_perp_satellites, closest_counter, closest_perp_counter)
+
+    if not is_edge_valid_undirected(base_sat, next_sat, num_isl, topology_graph):
+        return None, closest_counter, closest_perp_counter
+
+    return next_sat, closest_counter, closest_perp_counter
+
 
 def generate_riemannian_dynamic_topology(
         satellite_nodes, consistent_distance_graph, satellite_positions, 
         ground_station_positions, traffic_flow, num_isls
     ):
 
-    topology_graph = nx.Graph()
+    topology_graph = nx.DiGraph()
     topology_graph.add_nodes_from(satellite_nodes)
     shell_radius = np.linalg.norm(list(satellite_positions.values())[0])
     scaled_ground_station_positions = scale_ground_stations_to_shell(ground_station_positions, shell_radius)
 
     closest_satellites = {}
+    closest_perp_satellite = {}
     for base_sat in satellite_nodes:
         distance_list = []
-        time_start = time.time()
         base_perp_fields = calculate_per_flow_perp_field(satellite_positions[base_sat], scaled_ground_station_positions, traffic_flow)
         for other_sat in consistent_distance_graph[base_sat]:
             distance = calculate_riemannian_distance(satellite_positions[base_sat], satellite_positions[other_sat], base_perp_fields)
             distance_list.append((other_sat, distance))
         distance_list.sort(key=lambda x: x[1])
         closest_satellites[base_sat] = [sat for sat, _ in distance_list]
-        print(f"Base: {base_sat}, Closest: {closest_satellites[base_sat][0]}, Time taken: {time.time() - time_start:.2f} seconds")
+        closest_perp_satellite[base_sat] = [choose_perpendicular_neighbor(base_sat, chosen_sat, satellite_positions, consistent_distance_graph[base_sat]) for chosen_sat, _ in distance_list]
 
-    num_isl_perp = num_isls // 4 
-    for i in range(num_isl_perp):
-        for base_sat in satellite_nodes:
-            neighbors = consistent_distance_graph[base_sat]
-            chosen_sat = closest_satellites[base_sat][i]
-            perp_neighbor = choose_perpendicular_neighbor(base_sat, chosen_sat, satellite_positions, neighbors)
+    print("calculation of closest riemannian satellites completed.")
+
+    # First pass to add external edges based on Riemannian distance
+    closest_counters = {}
+    for base_sat in satellite_nodes:
+        closest_counter = 0
+        closest_perp_counter = 0
+        for _ in range(num_isls // 2):
+            chosen_sat, closest_counter, closest_perp_counter = choose_next_edge(
+                base_sat, closest_satellites, closest_perp_satellite, num_isls, topology_graph, closest_counter, closest_perp_counter
+            )
+            if chosen_sat is None:
+                break
             topology_graph.add_edge(base_sat, chosen_sat)
-            topology_graph.add_edge(base_sat, perp_neighbor)
+        closest_counters[base_sat] = (closest_counter, closest_perp_counter)
+
+    topology_graph = topology_graph.to_undirected()
+
+    print("First pass of edge assignment completed. Starting second pass for full degree utilization.")
+
+    # Second pass to ensure full degree utilization
+    for node in topology_graph.nodes():
+        node_degree = topology_graph.degree(node)
+        closest_counter, closest_perp_counter = closest_counters[node]
+        for _ in range(num_isls - node_degree):
+            chosen_sat, closest_counter, closest_perp_counter = choose_next_edge_undirected(
+                node, closest_satellites, closest_perp_satellite, num_isls, topology_graph, closest_counter, closest_perp_counter
+            )
+            if chosen_sat is None:
+                break
+            topology_graph.add_edge(node, chosen_sat)
 
     return topology_graph

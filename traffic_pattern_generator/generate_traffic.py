@@ -9,6 +9,13 @@ def read_ground_station_file(ground_station_file):
 
     return ground_stations, len(ground_stations)
 
+def create_output_file_single_traffic(distribution, source, destination, buffer_size, packet_length, packet_transmission_time, time_period):
+        traffic_file = open(f"./input/{distribution}_{source}_to_{destination}_demand#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
+        csv_writer = csv.writer(traffic_file)
+        csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(MB)"])
+
+        return csv_writer, traffic_file
+
 def create_output_file(distribution, ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period):
     file_name_without_csv = ground_station_file[:-4]
     traffic_file = open(f"./input/{distribution}_demand#{file_name_without_csv}#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
@@ -41,9 +48,21 @@ def generate_uniform_traffic(ground_station_file, buffer_size, packet_length, pa
 
     traffic_file.close()
 
+def generate_single_uniform_traffic(source, destination, buffer_size, packet_length, packet_transmission_time, time_period):
+    largest_traffic = buffer_size * packet_length / 1000.0
+    time_step = int(packet_transmission_time * buffer_size)
+    csv_writer, traffic_file = create_output_file_single_traffic("uniform", source, destination, buffer_size, packet_length, packet_transmission_time, time_period)
+
+    for time in range(0, time_period*1000, time_step):
+        traffic = np.random.uniform(0.0, largest_traffic)
+        csv_writer.writerow([time, source, destination, traffic])
+
+    traffic_file.close()
+
 def printHelp():    
-    print("shortest_path_algorithm.py --help")
-    print("shortest_path_algorithm.py --uniform [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --help")
+    print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -55,6 +74,8 @@ if __name__ == "__main__":
         printHelp()
     elif sys.argv[1] == "--uniform" and len(sys.argv) == 7:
         generate_uniform_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
+    elif sys.argv[1] == "--single_uniform" and len(sys.argv) == 8:
+        generate_single_uniform_traffic(sys.argv[2], sys.argv[3], int(sys.argv[4]), float(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]))
     else:
         print("Invalid Option or Missing Arguments!")
         printHelp()
