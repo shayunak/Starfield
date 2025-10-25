@@ -175,6 +175,130 @@ const App = {
       positions.sort((a, b) => Number(a['TimeStamp(ms)']) - Number(b['TimeStamp(ms)']));
     }
     return index;
+  },
+
+  // Parse simulation filename to extract info
+  // Expected format: SimulationSummary#2025_09_23,08_22_01#Starlink(72,22)#1000ms#1000s
+  parseSimulationFilename(filename) {
+    try {
+      // Remove .csv extension if present
+      const basename = filename.replace(/\.csv$/i, '');
+      
+      // Split by '#' delimiter
+      const parts = basename.split('#');
+      
+      if (parts.length < 5) {
+        console.warn('Filename does not match expected format');
+        return null;
+      }
+
+      // Extract constellation info from parts[2]: e.g., "Starlink(72,22)"
+      const constellationPart = parts[2];
+      const constellationMatch = constellationPart.match(/^([^(]+)\((\d+),(\d+)\)$/);
+      
+      if (!constellationMatch) {
+        console.warn('Cannot parse constellation info from:', constellationPart);
+        return null;
+      }
+
+      const Constellation_name = constellationMatch[1].trim();
+      const Number_of_orbits = parseInt(constellationMatch[2], 10);
+      const Satellites_per_orbit = parseInt(constellationMatch[3], 10);
+
+      // Extract time duration from parts[3]: e.g., "1000ms"
+      const timePart = parts[3];
+      const timeMatch = timePart.match(/^(\d+)ms$/);
+      
+      if (!timeMatch) {
+        console.warn('Cannot parse time duration from:', timePart);
+        return null;
+      }
+
+      const timeduration = parseInt(timeMatch[1], 10);
+
+      return {
+        Constellation_name,
+        Number_of_orbits,
+        Satellites_per_orbit,
+        timeduration
+      };
+    } catch (error) {
+      console.error('Error parsing simulation filename:', error);
+      return null;
+    }
+  },
+
+  // Generate Grid Plus topology structure
+  // Returns array of topology pairs
+  generateGridPlusTopology(numberOfOrbits, numberOfSatellitesPerOrbit, constellationName) {
+    if (!numberOfOrbits || !numberOfSatellitesPerOrbit || !constellationName) {
+      console.warn('Invalid parameters for GridPlus topology generation');
+      return { pairs: [], idSet: new Set() };
+    }
+
+    const gridPlus = new Array(4 * numberOfOrbits * numberOfSatellitesPerOrbit);
+    const idSet = new Set();
+    
+    for (let orbit = 0; orbit < numberOfOrbits; orbit++) {
+      const orbitOnLeft = (orbit + numberOfOrbits - 1) % numberOfOrbits;
+      const orbitOnRight = (orbit + 1) % numberOfOrbits;
+      
+      for (let satellite = 0; satellite < numberOfSatellitesPerOrbit; satellite++) {
+        const nextIdInOrbit = (satellite + 1) % numberOfSatellitesPerOrbit;
+        const previousIdInOrbit = (satellite + numberOfSatellitesPerOrbit - 1) % numberOfSatellitesPerOrbit;
+        const baseIndex = 4 * (orbit * numberOfSatellitesPerOrbit + satellite);
+        
+        const currentSat = `${constellationName}-${orbit}-${satellite}`;
+        const nextSat = `${constellationName}-${orbit}-${nextIdInOrbit}`;
+        const prevSat = `${constellationName}-${orbit}-${previousIdInOrbit}`;
+        const leftSat = `${constellationName}-${orbitOnLeft}-${satellite}`;
+        const rightSat = `${constellationName}-${orbitOnRight}-${satellite}`;
+        
+        gridPlus[baseIndex] = {
+          firstSatellite: currentSat,
+          secondSatellite: nextSat
+        };
+        gridPlus[baseIndex + 1] = {
+          firstSatellite: currentSat,
+          secondSatellite: prevSat
+        };
+        gridPlus[baseIndex + 2] = {
+          firstSatellite: currentSat,
+          secondSatellite: leftSat
+        };
+        gridPlus[baseIndex + 3] = {
+          firstSatellite: currentSat,
+          secondSatellite: rightSat
+        };
+        
+        // Collect all unique satellite IDs
+        idSet.add(currentSat);
+        idSet.add(nextSat);
+        idSet.add(prevSat);
+        idSet.add(leftSat);
+        idSet.add(rightSat);
+      }
+    }
+    
+    // Convert to pairs format (compatible with parseTopology output)
+    const pairs = [];
+    const seen = new Set();
+    
+    for (const link of gridPlus) {
+      const a = link.firstSatellite;
+      const b = link.secondSatellite;
+      const [x, y] = a < b ? [a, b] : [b, a];
+      const key = `${x}||${y}`;
+      
+      if (!seen.has(key)) {
+        seen.add(key);
+        pairs.push([x, y]);
+      }
+    }
+    
+    console.log(`Generated GridPlus topology: ${pairs.length} unique links for ${constellationName} (${numberOfOrbits}×${numberOfSatellitesPerOrbit})`);
+    
+    return { pairs, idSet };
   }
 };
 
@@ -241,6 +365,27 @@ async function visualizePacket(packetId) {
   viewer.entities.removeAll();
   topologyState.lines = [];
   topologyState.points = [];
+
+  // Parse simulation filename to extract constellation info
+  let Constellation_name = null;
+  let Number_of_orbits = null;
+  let Satellites_per_orbit = null;
+  let timeduration = null;
+  
+  const filenameInfo = App.parseSimulationFilename(packetFile.name);
+  if (filenameInfo) {
+    Constellation_name = filenameInfo.Constellation_name;
+    Number_of_orbits = filenameInfo.Number_of_orbits;
+    Satellites_per_orbit = filenameInfo.Satellites_per_orbit;
+    timeduration = filenameInfo.timeduration;
+    
+    console.log('Parsed simulation info:', {
+      Constellation_name,
+      Number_of_orbits,
+      Satellites_per_orbit,
+      timeduration
+    });
+  }
 
   try {
     status.textContent = 'Loading packet data...';
@@ -433,9 +578,11 @@ async function visualizeTopology() {
   const packetFile = document.getElementById('packetFile')?.files?.[0];
   const topologyFile = document.getElementById('topologyFile').files[0];
   const positionFile = document.getElementById('positionFile').files[0];
+  const useGridPlus = document.getElementById('gridCheckbox')?.checked || false;
 
-  if (!topologyFile) {
-    status.textContent = 'Please select topology.csv.';
+  // Check required files based on Grid+ option
+  if (!useGridPlus && !topologyFile) {
+    status.textContent = 'Please select topology.csv or check Grid+ option.';
     return;
   }
   if (!positionFile) {
@@ -448,11 +595,53 @@ async function visualizeTopology() {
   }
 
   try {
-    status.textContent = 'Loading topology...';
-    const { pairs, idSet } = await App.parseTopology(topologyFile);
-    if (pairs.length === 0) {
-      status.textContent = 'No valid satellite pairs in topology.csv.';
-      return;
+    let pairs, idSet;
+    
+    if (useGridPlus) {
+      // Use GridPlus topology generation
+      status.textContent = 'Generating GridPlus topology...';
+      // Parse filename to get constellation parameters
+      const filenameInfo = App.parseSimulationFilename(packetFile.name);
+      
+      if (!filenameInfo) {
+        status.textContent = 'Cannot parse simulation filename for GridPlus. Please check file format.';
+        return;
+      }
+      
+      const { Constellation_name, Number_of_orbits, Satellites_per_orbit } = filenameInfo;
+      
+      console.log('Generating GridPlus topology with:', {
+        Constellation_name,
+        Number_of_orbits,
+        Satellites_per_orbit
+      });
+      
+      const gridPlusResult = App.generateGridPlusTopology(
+        Number_of_orbits,
+        Satellites_per_orbit,
+        Constellation_name
+      );
+      
+      pairs = gridPlusResult.pairs;
+      idSet = gridPlusResult.idSet;
+      
+      if (pairs.length === 0) {
+        status.textContent = 'Failed to generate GridPlus topology.';
+        return;
+      }
+      
+      console.log(`GridPlus topology generated: ${pairs.length} links, ${idSet.size} satellites`);
+    } else {
+      // Use topology from file
+      status.textContent = 'Loading topology from file...';
+      const topologyResult = await App.parseTopology(topologyFile);
+      pairs = topologyResult.pairs;
+      idSet = topologyResult.idSet;
+      
+      if (pairs.length === 0) {
+        status.textContent = 'No valid satellite pairs in topology.csv.';
+        return;
+      }
     }
 
     // Get time window from packet data
