@@ -115,9 +115,27 @@ def riemannian_fields(cartesian_positions_file, source, destination, time_period
     filename = f"RiemannianFields#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites})#({source},{destination})#{time_period}s(every){time_interval}s.csv"
     save_fields_to_file(fields_over_time, f'./generated/{filename}')
 
-def riemannian_static_topology(distance_file, cartesian_positions_file, num_isls):
-    print("Riemannian Static Topology generation is not yet implemented.")
-    # Placeholder for future implementation
+def riemannian_static_topology(distance_file, cartesian_positions_file, demand_matrix_file, num_isls):
+    is_consistent_graph, df_graph, constellation_name, time_step, total_time, _, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
+    consistent_distance_graph, satellite_nodes = df_graph, nodes
+    if not is_consistent_graph:
+        consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
+
+    ground_station_positions, satellite_positions = rmtg.get_cartesian_positions(cartesian_positions_file, constellation_name)
+    flows_traffics = rmtg.get_flows_traffics(demand_matrix_file)
+    initial_traffic_flow = flows_traffics[0]
+    initial_satellite_position = satellite_positions[0]
+    initial_ground_station_position = ground_station_positions[0]
+
+    topology_graph = rmtg.generate_riemannian_static_topology(
+        satellite_nodes, num_orbits, num_satellites, constellation_name, 
+        consistent_distance_graph, initial_satellite_position, 
+        initial_ground_station_position, initial_traffic_flow, num_isls
+    )
+
+    filename = f"RiemannianStaticTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites}).csv"
+    save_static_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
+    
 
 def printHelp():
     print("topology_generator.py --help")
@@ -133,9 +151,11 @@ if __name__ == "__main__":
         exit(1)
     
     if sys.argv[1] == "--help":
-        printHelp()
+        printHelp() 
     elif sys.argv[1] == "--random_static" and len(sys.argv) == 4:
         random_static_topology(sys.argv[2], int(sys.argv[3]))
+    elif sys.argv[1] == "--riemannian_static" and len(sys.argv) == 6:
+        riemannian_static_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
     elif sys.argv[1] == "--riemannian_dynamic" and len(sys.argv) == 8:
         riemannian_dynamic_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]))
     elif sys.argv[1] == "--riemannian_fields" and len(sys.argv) == 7:

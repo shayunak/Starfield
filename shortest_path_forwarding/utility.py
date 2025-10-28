@@ -45,7 +45,7 @@ def forwarding_folder_csv_file(simulation_details, title, nodes):
         node_files.append(file)
         node_writers[node] = csv_writer
 
-    return node_files, node_writers
+    return node_files, node_writers, folder_name
 
 def close_files(node_files):
     for file in node_files:
@@ -53,7 +53,7 @@ def close_files(node_files):
 
 def printHelp():
     print("shortest_path.py --help")
-    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra [distance file]")
-    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_grid_plus [distance file]")
-    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_static [distance file] [topology_file_static]")
-    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_dynamic [distance file] [topology_file_dynamic]")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra [distance file] ([time_period(s)])")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_grid_plus [distance file] ([time_period(s)])")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_static [distance file] [topology_file_static] ([time_period(s)])")
+    print("shortest_path.py --[isl/gsl/isl&gsl] --dijkstra_dynamic [distance file] [topology_file_dynamic] ([time_period(s)])")
