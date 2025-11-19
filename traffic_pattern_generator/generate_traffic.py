@@ -12,7 +12,7 @@ def read_ground_station_file(ground_station_file):
 def create_output_file_single_traffic(distribution, source, destination, buffer_size, packet_length, packet_transmission_time, time_period):
         traffic_file = open(f"./input/{distribution}_{source}_to_{destination}_demand#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
         csv_writer = csv.writer(traffic_file)
-        csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(MB)"])
+        csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(Mb)"])
 
         return csv_writer, traffic_file
 
@@ -20,7 +20,7 @@ def create_output_file(distribution, ground_station_file, buffer_size, packet_le
     file_name_without_csv = ground_station_file[:-4]
     traffic_file = open(f"./input/{distribution}_demand#{file_name_without_csv}#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
     csv_writer = csv.writer(traffic_file)
-    csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(MB)"])
+    csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(Mb)"])
 
     return csv_writer, traffic_file
 
@@ -61,8 +61,8 @@ def generate_single_uniform_traffic(source, destination, buffer_size, packet_len
 
 def printHelp():    
     print("generate_traffic.py --help")
-    print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
