@@ -1,7 +1,13 @@
-import csv
+import csv, torch
 import numpy as np
 
+# small epsilon for numerical stability
+_eps = 1e-9
 K = 5*10**6 # Field constant coefficient
+
+def _ensure_device(x, device):
+    t = torch.as_tensor(x, dtype=torch.float32, device=device)
+    return t
 
 def is_satellite(device_id, constellation_name):
     splitted_name = device_id.split("-")
@@ -9,16 +15,19 @@ def is_satellite(device_id, constellation_name):
         return True
     return False
 
-def get_cartesian_positions(cartesian_positions_file, constellation_name):
+def get_cartesian_positions(cartesian_positions_file, constellation_name, time_period, device=torch.device('cpu')):
     cartesian_satellite_positions = {}
     cartesian_ground_station_positions = {}
+    end_time_stamp = time_period * 1000
     with open(f'./generated/{cartesian_positions_file}', 'r') as file:
         reader = csv.reader(file)
         next(reader)  # Skip header
         for row in reader:
             time_stamp = int(row[0])
+            if time_stamp > end_time_stamp:
+                break
             device_id = row[1]
-            position = np.array([float(row[2]), float(row[3]), float(row[4])]) # (X, Y, Z)
+            position = _ensure_device([float(row[2]), float(row[3]), float(row[4])], device) # (X, Y, Z)
             if is_satellite(device_id, constellation_name):
                 if time_stamp not in cartesian_satellite_positions:
                     cartesian_satellite_positions[time_stamp] = {}
@@ -99,121 +108,136 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
 
 def scale_ground_stations_to_shell(ground_station_positions, shell_radius):
     scaled_positions = {}
-    for device_id, position in ground_station_positions.items():
-        r = np.linalg.norm(position)
-        if r == 0:
-            raise ValueError("Ground station position cannot be at the origin!")
-        scaling_factor = shell_radius / r
-        scaled_positions[device_id] = scaling_factor * position
-
+    for key, pos in ground_station_positions.items():
+        r = torch.linalg.norm(pos).clamp_min(_eps)
+        scaled_positions[key] = pos * (shell_radius / r)
     return scaled_positions
 
-def calculate_tangent_vector(point_pos, geo_base_pos):
-    perp_plane_vec = np.cross(geo_base_pos, point_pos)
-    tangent_vec = np.cross(perp_plane_vec, point_pos)
 
-    return tangent_vec / np.linalg.norm(tangent_vec)
+def mirror_sat_to_base_plane(base_pos, other_pos):
+    base_norm2 = (base_pos * base_pos).sum()
+    dot = (base_pos * other_pos).sum().clamp_min(_eps)
+    factor = base_norm2 / dot
+    return factor * other_pos
+
+
+def calculate_tangent_vector(point_pos, geo_pos):
+    perp_plane = torch.cross(geo_pos, point_pos, dim=0)
+    tangent = torch.cross(perp_plane, point_pos, dim=0)
+    return tangent / torch.linalg.norm(tangent).clamp_min(_eps)
+
 
 def calculate_geodesic_distance(point_a, point_b):
-    half_arc_line = np.linalg.norm(point_a - point_b) / 2
-    radius = np.linalg.norm(point_a)
-    arc_angle = 2 * np.arcsin(half_arc_line / radius)
-    return radius * arc_angle
+    half_line = torch.linalg.norm(point_a - point_b) / 2
+    R = torch.linalg.norm(point_a).clamp_min(_eps)
+    x = (half_line / R).clamp(-1 + 1e-7, 1 - 1e-7)
+    arc = 2 * torch.asin(x)
+    return R * arc
 
-def calculate_field(position, flow_source_pos, flow_destination_pos, flow_strength):
-    source_tangent_vector = calculate_tangent_vector(position, flow_source_pos)
-    destination_tangent_vector = calculate_tangent_vector(position, flow_destination_pos)
 
-    geodesic_distance_from_source = calculate_geodesic_distance(position, flow_source_pos)
-    geodesic_distance_from_destination = calculate_geodesic_distance(position, flow_destination_pos)
+def calculate_field(pos, src, dst, strength, K):
+    t_src = calculate_tangent_vector(pos, src)
+    t_dst = calculate_tangent_vector(pos, dst)
 
-    source_term = K * flow_strength * destination_tangent_vector / (geodesic_distance_from_source ** 2)
-    destination_term = K * flow_strength * source_tangent_vector / (geodesic_distance_from_destination ** 2)
+    d_src = calculate_geodesic_distance(pos, src)
+    d_dst = calculate_geodesic_distance(pos, dst)
 
-    return destination_term - source_term
+    term_src = K * strength * t_dst / (d_src * d_src).clamp_min(_eps)
+    term_dst = K * strength * t_src / (d_dst * d_dst).clamp_min(_eps)
+    return term_dst - term_src
 
-def mirror_sat_to_base_plane(base_sat_pos, other_sat_pos):
-    scaling_factor = (np.linalg.norm(base_sat_pos) ** 2) / np.dot(base_sat_pos, other_sat_pos)
-    return scaling_factor * other_sat_pos
 
-def calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, perp_field):
-    mirrored_on_plane_other_sat_pos = mirror_sat_to_base_plane(base_sat_pos, other_sat_pos)
-    inter_sat_vector = mirrored_on_plane_other_sat_pos - base_sat_pos
-    inter_sat_vector_norm = np.linalg.norm(inter_sat_vector)
-    field_norm = np.linalg.norm(perp_field)
-    inter_sat_hop_stretch_factor = 2.0 * np.exp(-field_norm)
-    directional_component = np.abs(np.dot(inter_sat_vector, perp_field))
+def calculate_perp_field(pos, field):
+    perp_dir = torch.cross(field, pos, dim=0)
+    perp_dir = perp_dir / torch.linalg.norm(perp_dir).clamp_min(_eps)
+    return torch.linalg.norm(field) * perp_dir
 
-    return directional_component / (inter_sat_vector_norm ** inter_sat_hop_stretch_factor)
+def calculate_per_flow_perp_field(base_pos, gs_positions, flows, K=1.0):
+    """Vectorized across flows."""
+    perp_list = []
+    for src, dst, strength in flows:
+        f = calculate_field(base_pos, gs_positions[src], gs_positions[dst], strength, K=K)
+        perp = calculate_perp_field(base_pos, f)
+        perp_list.append(perp)
+    return torch.stack(perp_list) if perp_list else torch.zeros((0,3), device=base_pos.device)
 
-def calculate_riemannian_distance(base_sat_pos, other_sat_pos, perp_fields):
-    total_distance = 0.0
-    #dist = {
-    #    "dir_comp": [],
-    #    "field_norm": [],
-    #    "inter_sat_vector_norm": [],
-    #    "riemannian_distance": []
-    #}
-    for perp_field in perp_fields:
-        riemannian_distance = calculate_riemannian_distance_of_flow(base_sat_pos, other_sat_pos, perp_field)
-        #dist["dir_comp"].append(dir_comp)
-        #dist["field_norm"].append(field_norm)
-        #ist["inter_sat_vector_norm"].append(inter_sat_vector_norm)
-        #dist["riemannian_distance"].append(riemannian_distance)
-        total_distance += riemannian_distance
+def calculate_riemannian_distances(base_pos, other_pos, perp_fields):
+    # mirror on tangent plane
+    base_norm2 = (base_pos * base_pos).sum()
+    dot_base_other = (base_pos * other_pos).sum().clamp_min(1e-9)
+    factor = base_norm2 / dot_base_other
+    mirrored = factor * other_pos
 
-    return total_distance
-
-def calculate_perp_field(sat_pos, field):
-    perp_field_dir_unnorm = np.cross(field, sat_pos)
-    perp_field_dir = perp_field_dir_unnorm / np.linalg.norm(perp_field_dir_unnorm)
-    perp_field = np.linalg.norm(field) * perp_field_dir
-
-    return perp_field
-
-def calculate_per_flow_perp_field(base_sat_pos, ground_station_positions, traffic_flows):
-    flows_fields_perp = []
-    for source, dest, strength in traffic_flows:
-        field = calculate_field(base_sat_pos, ground_station_positions[source], ground_station_positions[dest], strength)
-        perp_field = calculate_perp_field(base_sat_pos, field)
-        flows_fields_perp.append(perp_field)
-
-    return flows_fields_perp
-
-def choose_perpendicular_neighbor(base_sat, chosen_sat, sat_positions, neighbors):
-    base_sat_pos = sat_positions[base_sat]
-    chosen_sat_on_plane_vec = mirror_sat_to_base_plane(base_sat_pos, sat_positions[chosen_sat])
-    base_to_chosen_vec = chosen_sat_on_plane_vec - base_sat_pos
-    neighbor_perp_score = []
-    for neighbor in neighbors:
-        neighbor_on_plane_vec = mirror_sat_to_base_plane(base_sat_pos, sat_positions[neighbor])
-        base_to_neighbor_vec = neighbor_on_plane_vec - base_sat_pos
-        if np.dot(np.cross(base_to_chosen_vec, base_to_neighbor_vec), base_sat_pos) > 0:
-            perp_score = np.abs(np.dot(base_to_chosen_vec, base_to_neighbor_vec)) / (np.linalg.norm(base_to_chosen_vec) * np.linalg.norm(base_to_neighbor_vec))
-            neighbor_perp_score.append((neighbor, perp_score))
+    inter_vec = mirrored - base_pos
+    inter_vec_norm = torch.linalg.norm(inter_vec).clamp_min(_eps)
     
-    return min(neighbor_perp_score, key=lambda x: x[1])[0]
+    field_norms = torch.linalg.norm(perp_fields).clamp_min(_eps)
 
-def calculate_distances_riemannian_satellites(satellite_nodes, satellite_positions, ground_station_positions, traffic_flow, consistent_distance_graph):
-    shell_radius = np.linalg.norm(list(satellite_positions.values())[0])
-    scaled_ground_station_positions = scale_ground_stations_to_shell(ground_station_positions, shell_radius)
+    inter_hop_stretch_factors = 2.0 * torch.exp(-field_norms)
+    directional_components = torch.abs((inter_vec * perp_fields).sum(dim=1))
+    distance_priorities = inter_vec_norm ** inter_hop_stretch_factors
+
+    distances = directional_components / distance_priorities
+
+    return float(distances.sum().item())
+
+def choose_perpendicular_neighbor(base_id, chosen_id, sat_positions, neighbors):
+    base_pos = sat_positions[base_id]
+    chosen_pos = sat_positions[chosen_id]
+
+    chosen_plane = mirror_sat_to_base_plane(base_pos, chosen_pos)
+    base_to_chosen = chosen_plane - base_pos
+    base_to_chosen_norm = torch.linalg.norm(base_to_chosen).clamp_min(_eps)
+
+    # Pack neighbors into tensor
+    nb_pos = torch.stack([sat_positions[n] for n in neighbors])  # (N,3)
+    nb_plane = torch.stack([mirror_sat_to_base_plane(base_pos, x) for x in nb_pos])  # (N,3)
+    base_to_nb = nb_plane - base_pos
+
+    # orientation test
+    cross_prod = torch.cross(base_to_chosen.expand_as(base_to_nb), base_to_nb, dim=1)
+    orient = (cross_prod * base_pos).sum(dim=1)
+    mask = orient > 0
+
+    if not mask.any():
+        return neighbors[0]
+
+    valid_nb = base_to_nb[mask]
+    valid_ids = [n for i, n in enumerate(neighbors) if mask[i].item()]
+
+    dots = torch.abs((valid_nb * base_to_chosen).sum(dim=1))
+    norms = (base_to_chosen_norm * torch.linalg.norm(valid_nb, dim=1)).clamp_min(_eps)
+
+    scores = dots / norms
+    best_idx = torch.argmin(scores).item()
+
+    return valid_ids[best_idx]
+
+def calculate_distances_riemannian_satellites(
+    satellite_nodes,
+    sat_positions,
+    gs_positions,
+    traffic_flows,
+    neighbor_graph
+):
+    shell_radius = torch.linalg.norm(next(iter(sat_positions.values()))).item()
+    gs_scaled = scale_ground_stations_to_shell(gs_positions, shell_radius)
+
     distances = {}
-    
-    for base_sat in satellite_nodes:
-        distance_dict = {}
-        base_perp_fields = calculate_per_flow_perp_field(satellite_positions[base_sat], scaled_ground_station_positions, traffic_flow)
-        for other_sat in consistent_distance_graph[base_sat]:
-            distance = calculate_riemannian_distance(satellite_positions[base_sat], satellite_positions[other_sat], base_perp_fields)
-            perp_sat = choose_perpendicular_neighbor(base_sat, other_sat, satellite_positions, consistent_distance_graph[base_sat])
-            distance_dict[other_sat] = (perp_sat, distance)
-        distances[base_sat] = distance_dict
 
-    #for sat, dist_dict in distances.items():
-    #    for other_sat, (perp_sat, dist) in dist_dict.items():
-    #        print(f"distance params from {sat} to {other_sat}: ")
-    #        for i in range(len(dist["riemannian_distance"])):
-    #            print(f"  Flow {i+1}: Dir Comp={dist['dir_comp'][i]:.4f}, Field Norm={dist['field_norm'][i]:.4f}, Inter-Sat Vector Norm={dist['inter_sat_vector_norm'][i]:.4f}, Riemannian Distance={dist['riemannian_distance'][i]:.4f}")
+    for base in satellite_nodes:
+        base_pos = sat_positions[base]
+        perp_fields = calculate_per_flow_perp_field(base_pos, gs_scaled, traffic_flows, K=K)
 
-    print("calculation of closest riemannian satellites completed.")
+        dist_dict = {}
+        for other in neighbor_graph[base]:
+            other_pos = sat_positions[other]
+
+            d = calculate_riemannian_distances(base_pos, other_pos, perp_fields)
+            perp_nb = choose_perpendicular_neighbor(base, other, sat_positions, neighbor_graph[base])
+
+            dist_dict[other] = (perp_nb, d)
+
+        distances[base] = dist_dict
 
     return distances

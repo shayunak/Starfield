@@ -1,6 +1,6 @@
-import csv
+import csv, sys
 from datetime import datetime
-import sys
+import torch
 import random_topology_generator as rtg
 import riemannian_dynamic_topology_generator as rdtg
 import riemannian_static_topology_generator as rstg
@@ -81,7 +81,7 @@ def riemannian_fields(cartesian_positions_file, source, destination, time_period
     splited_filename = cartesian_positions_file[:-4].split("#")
     constellation_name, orbital_structure = splited_filename[2].split("(")
     num_orbits, num_satellites = map(int, orbital_structure.rstrip(")").split(","))
-    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name)
+    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name, time_period)
 
     satellite_nodes = list(satellite_positions[0].keys())
     fields_over_time = {}
@@ -100,7 +100,7 @@ def riemannian_static_topology(distance_file, cartesian_positions_file, demand_m
     if not is_consistent_graph:
         consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
 
-    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name)
+    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name, total_time / 1000)
     _, avg_flows = rfm.get_flows_traffics(demand_matrix_file)
     initial_satellite_position = satellite_positions[0]
     initial_ground_station_position = ground_station_positions[0]
@@ -122,7 +122,7 @@ def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_
     if not is_consistent_graph:
         consistent_distance_graphs, satellite_nodes = cdg.get_dynamic_consistent_distance_graphs(df_graph, nodes, constellation_name, num_orbits, num_satellites, file_time, time_step, time_interval, time_period)
 
-    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name)
+    ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name, time_period)
     flows_traffics, _ = rfm.get_flows_traffics(demand_matrix_file)
     avg_interval_flows = rfm.avg_flow_traffics(flows_traffics, time_interval * 1000, time_period * 1000)
 
