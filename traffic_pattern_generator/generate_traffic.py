@@ -34,7 +34,6 @@ def generate_rows(time, matrix, ground_stations, number_of_ground_stations):
 
     return rows   
 
-
 def generate_uniform_traffic(ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period):
     ground_stations, number_of_ground_stations = read_ground_station_file(ground_station_file)
     largest_traffic = buffer_size * packet_length / (1000.0 * (number_of_ground_stations - 1))
@@ -101,11 +100,42 @@ def generate_distance_traffic(ground_station_file, buffer_size, packet_length, p
 
     traffic_file.close()
 
+def generate_population_traffic(ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period):
+    #load ground station data include population
+    ground_station_dataframe = pd.read_csv(f"./configs/{ground_station_file}")
+    ground_stations = ground_station_dataframe['Id'].tolist()
+    number_of_ground_stations = len(ground_stations)
+    #fetch population data
+    Population = ground_station_dataframe['population'].fillna(0).to_numpy(dtype=float)
+    #calculate Population Weight Matrix
+    total_population_sum = np.sum(Population)
+    squared_population_sum = np.sum(Population**2)
+    total = total_population_sum**2 - squared_population_sum
+    pair_population = np.outer(Population, Population)
+    #calculate Weight matrix
+    Weight = np.zeros((number_of_ground_stations, number_of_ground_stations), dtype=float)
+    if total > 0:
+        Weight = pair_population / total
+    np.fill_diagonal(Weight, 0)
+
+    largest_traffic = buffer_size * packet_length / (1000.0 * (number_of_ground_stations - 1))
+    time_step = int(packet_transmission_time * buffer_size)
+    csv_writer, traffic_file = create_output_file("population_uniform", ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period)
+
+    for time in range(0, time_period * 1000, time_step): 
+        matrix = np.random.uniform(0.0, largest_traffic, size=(number_of_ground_stations, number_of_ground_stations))
+        F = Weight * matrix
+        np.fill_diagonal(F, 0)
+        rows = generate_rows(time, F, ground_stations, number_of_ground_stations)
+        csv_writer.writerows(rows)
+        
+    traffic_file.close()
 
 def printHelp():    
     print("generate_traffic.py --help")
     print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --distance [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --population_uniform [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     
 
@@ -123,6 +153,8 @@ if __name__ == "__main__":
         generate_single_uniform_traffic(sys.argv[2], sys.argv[3], int(sys.argv[4]), float(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]))
     elif sys.argv[1] == "--distance" and len(sys.argv) == 7:
         generate_distance_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
+    elif sys.argv[1] == "--population" and len(sys.argv) == 7:  
+        generate_population_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
     else:
         print("Invalid Option or Missing Arguments!")
         printHelp()
