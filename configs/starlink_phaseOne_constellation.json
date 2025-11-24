@@ -25,6 +25,6 @@
         "gsl_bandwidth": 100000.0,
         "gsl_link_noise_coef": 400.0,
         "max_packet_size": 12.0,
-        "interface_buffer_size": 100
+        "interface_buffer_size": 1000
     }
 }
