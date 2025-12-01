@@ -3,7 +3,7 @@ import numpy as np
 
 # small epsilon for numerical stability
 _eps = 1e-9
-K = 5*10**6 # Field constant coefficient
+K = 10**8 # Field constant coefficient
 
 def _ensure_device(x, device):
     t = torch.as_tensor(x, dtype=torch.float32, device=device)

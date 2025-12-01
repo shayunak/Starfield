@@ -3,11 +3,12 @@ package setup
 import (
 	"encoding/csv"
 	"os"
+	"strconv"
 
 	"github.com/shayunak/SatSimGo/connections"
 )
 
-func openISLTopologyFile(fileName string) (*os.File, *csv.Reader) {
+func openISLTopologyFile(fileName string) (*os.File, *csv.Reader, bool) {
 	ISLTopologyFilePath := "./input/" + fileName
 	file, err := os.Open(ISLTopologyFilePath)
 	if err != nil {
@@ -16,23 +17,40 @@ func openISLTopologyFile(fileName string) (*os.File, *csv.Reader) {
 
 	csvReader := csv.NewReader(file)
 
-	_, err = csvReader.Read()
+	header, err := csvReader.Read()
 	if err != nil {
 		panic(err)
 	}
 
-	return file, csvReader
+	if header[0] == "TimeStamp(ms)" {
+		return file, csvReader, true
+	}
+	return file, csvReader, false
 }
 
-// ISL file format: FirstSatellite, SecondSatellite
+// ISL file format: (TimeStamp(ms)), FirstSatellite, SecondSatellite
 // Important: The file should have both (S1, S2) and (S2, S1) pairs symmetrically, like a matrix
 func readISLTopologyFile(ISLTopologyFileName string) [][]string {
-	file, reader := openISLTopologyFile(ISLTopologyFileName)
+	var records [][]string
+	file, reader, isDynamic := openISLTopologyFile(ISLTopologyFileName)
 
 	defer file.Close()
 
-	// read the data
-	records, _ := reader.ReadAll()
+	if isDynamic {
+		for {
+			record, err := reader.Read()
+			if err != nil {
+				break
+			}
+			timeStamp, _ := strconv.Atoi(record[0])
+			if timeStamp > 0 {
+				break
+			}
+			records = append(records, []string{record[1], record[2]})
+		}
+	} else {
+		records, _ = reader.ReadAll()
+	}
 
 	return records
 }

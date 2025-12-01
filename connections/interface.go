@@ -39,6 +39,7 @@ type INetworkInterface interface {
 	GetDeviceConnectedTo() string
 	GetDeviceOwner() string
 	GetLink() ILink
+	SetInterfaceId(interfaceId int)
 	ProcessBuffer()
 	ProcessReceivedPacket(packet *Packet) Event
 	ChangeSendLink(newDeviceConnectedTo string, newSendChannel *chan Packet)
@@ -71,6 +72,10 @@ func (networkInterface *NetworkInterface) HasSendChannel() bool {
 
 func (networkInterface *NetworkInterface) GetReceiveChannel() *chan Packet {
 	return networkInterface.ReceiveChannel
+}
+
+func (networkInterface *NetworkInterface) SetInterfaceId(interfaceId int) {
+	networkInterface.InterfaceId = interfaceId
 }
 
 func (networkInterface *NetworkInterface) Clone() INetworkInterface {

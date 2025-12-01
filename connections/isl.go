@@ -58,6 +58,21 @@ func InitISLs(ownerSatellite string, numberOfIsls int, speedOfLightVAC float64, 
 	return islList
 }
 
+func InitISL(ownerSatellite string, interfaceId int, speedOfLightVAC float64, bandwidth float64, linkNoiseCoef float64,
+	anomalyCalculations helpers.IAnomalyCalculation, maxPacketSize float64, interfaceBufferSize int) INetworkInterface {
+	return &NetworkInterface{
+		InterfaceId:         interfaceId,
+		InterfaceOwner:      ownerSatellite,
+		SendChannel:         nil,
+		ReceiveChannel:      nil,
+		Link:                &ISL{speedOfLightVAC, 0.0, 0.0, bandwidth, linkNoiseCoef, maxPacketSize, anomalyCalculations},
+		DeviceConnectedTo:   "",
+		BufferEndTimes:      make([]float64, 0),
+		Buffer:              make([]Packet, 0),
+		InterfaceBufferSize: interfaceBufferSize,
+	}
+}
+
 func (isl *ISL) Clone() ILink {
 	return &ISL{
 		SpeedOfLightVAC:  isl.SpeedOfLightVAC,

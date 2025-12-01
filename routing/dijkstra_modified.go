@@ -7,11 +7,11 @@ import (
 	"github.com/shayunak/SatSimGo/helpers"
 )
 
-func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp float64, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) int {
+func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp float64, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) string {
 	distances := make([]float64, len(interfaces))
 	nextBestHopOrbit, nextBestHopId := helpers.GetOrbitAndSatelliteId(nextBestHop)
 
-	for i := 0; i < len(interfaces); i++ {
+	for i := range interfaces {
 		if interfaces[i] == "" {
 			distances[i] = math.Inf(1)
 		} else {
@@ -23,15 +23,15 @@ func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp float64, interface
 	minDistance := slices.Min(distances)
 
 	if minDistance == math.Inf(1) {
-		return -1
+		return ""
 	}
 
 	// Find index of minimum distance
-	for i := 0; i < len(distances); i++ {
+	for i := range distances {
 		if distances[i] == minDistance {
-			return i
+			return interfaces[i]
 		}
 	}
 
-	return -1
+	return ""
 }
