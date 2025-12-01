@@ -9,7 +9,6 @@ import (
 
 	"github.com/shayunak/SatSimGo/connections"
 	"github.com/shayunak/SatSimGo/helpers"
-	"github.com/shayunak/SatSimGo/routing"
 )
 
 type ForwardingEntry map[string]string
@@ -98,9 +97,11 @@ type ISatellite interface {
 	getReceiveGSL() ([]*chan connections.Packet, []string)
 	getReceiveISL() ([]*chan connections.Packet, []string)
 	findGSLConnection(toGroundStation string) connections.INetworkInterface
+	findISLConnection(toSatellite string) connections.INetworkInterface
 	getISLInterfaceNames() []string
 	establishGSLConnection(toGroundStation string) connections.INetworkInterface
-	establishSendChannel(inface connections.INetworkInterface, toGroundStation string)
+	establishISLConnection(toSatellite string) connections.INetworkInterface
+	establishSendChannel(inface connections.INetworkInterface, toDevice string)
 	logEvent(timeStamp int, eventType int, packet *connections.Packet, srcSatellite string, destSatellite string)
 }
 
@@ -406,13 +407,24 @@ func (satellite *Satellite) CheckIncomingConnections() {
 }
 
 func (satellite *Satellite) ProcessIncomingConnection(linkReq LinkRequest) {
-	inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
-	if found {
-		inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+	if satellite.Orbit.IsOwnerSatellite(linkReq.FromDevice) {
+		inface, found := satellite.ISLInterfaces[linkReq.FromDevice]
+		if found {
+			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		} else {
+			newInterface := satellite.ISLInterfaceSample.Clone()
+			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+			satellite.ISLInterfaces[linkReq.FromDevice] = newInterface
+		}
 	} else {
-		newInterface := satellite.GSLInterfaceSample.Clone()
-		newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
-		satellite.GSLInterfaces[linkReq.FromDevice] = newInterface
+		inface, found := satellite.GSLInterfaces[linkReq.FromDevice]
+		if found {
+			inface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+		} else {
+			newInterface := satellite.GSLInterfaceSample.Clone()
+			newInterface.ChangeReceiveLink(linkReq.FromDevice, linkReq.SendChannel)
+			satellite.GSLInterfaces[linkReq.FromDevice] = newInterface
+		}
 	}
 }
 
@@ -470,6 +482,20 @@ func (satellite *Satellite) logEvent(timeStamp int, eventType int, packet *conne
 	}
 }
 
+func (satellite *Satellite) findISLConnection(toSatellite string) connections.INetworkInterface {
+	inface, ok := satellite.ISLInterfaces[toSatellite]
+	if ok {
+		if inface.HasSendChannel() {
+			return inface
+		} else {
+			satellite.establishSendChannel(inface, toSatellite)
+			return inface
+		}
+	} else {
+		return satellite.establishISLConnection(toSatellite)
+	}
+}
+
 func (satellite *Satellite) findGSLConnection(toGroundStation string) connections.INetworkInterface {
 	inface, ok := satellite.GSLInterfaces[toGroundStation]
 	if ok {
@@ -484,11 +510,11 @@ func (satellite *Satellite) findGSLConnection(toGroundStation string) connection
 	}
 }
 
-func (satellite *Satellite) establishSendChannel(inface connections.INetworkInterface, toGroundStation string) {
+func (satellite *Satellite) establishSendChannel(inface connections.INetworkInterface, ToDevice string) {
 	sendChannel := make(chan connections.Packet, satellite.InterfaceBufferSize)
 	inface.ChangeSendLink(inface.GetDeviceConnectedTo(), &sendChannel)
 	linkRequest := LinkRequest{
-		ToDevice:    toGroundStation,
+		ToDevice:    ToDevice,
 		FromDevice:  satellite.Name,
 		SendChannel: &sendChannel,
 	}
@@ -507,6 +533,26 @@ func (satellite *Satellite) establishGSLConnection(toGroundStation string) conne
 	newNetworkInterface.ChangeSendLink(toGroundStation, &sendChannel)
 	linkRequest := LinkRequest{
 		ToDevice:    toGroundStation,
+		FromDevice:  satellite.Name,
+		SendChannel: &sendChannel,
+	}
+	select {
+	case *satellite.LinkerOutgoingChannel <- linkRequest:
+		return newNetworkInterface
+	default:
+		satellite.PendingConnections = append(satellite.PendingConnections, linkRequest)
+	}
+
+	return newNetworkInterface
+}
+
+func (satellite *Satellite) establishISLConnection(toSatellite string) connections.INetworkInterface {
+	newNetworkInterface := satellite.ISLInterfaceSample.Clone()
+	satellite.ISLInterfaces[toSatellite] = newNetworkInterface
+	sendChannel := make(chan connections.Packet, satellite.InterfaceBufferSize)
+	newNetworkInterface.ChangeSendLink(toSatellite, &sendChannel)
+	linkRequest := LinkRequest{
+		ToDevice:    toSatellite,
 		FromDevice:  satellite.Name,
 		SendChannel: &sendChannel,
 	}
@@ -592,16 +638,12 @@ func (satellite *Satellite) SendPackets() float64 {
 			roundedTimeStamp := int(nextEventTime/satellite.Dt) * int(satellite.Dt)
 			forwardingChoice := satellite.ForwardingTable[roundedTimeStamp][packet.Destination]
 			if satellite.Orbit.IsOwnerSatellite(forwardingChoice) {
-				interfaceName := routing.DijkstraModifiedOnGridPlus(forwardingChoice, nextEventTime, satellite.getISLInterfaceNames(), satellite.AnomalyCalculations)
-				if interfaceName != "" {
-					packetDropped, timeOfAttempt := satellite.ISLInterfaces[interfaceName].Send(packet, itemPopped.Value.TimeStamp)
-					if !packetDropped {
-						satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, satellite.ISLInterfaces[interfaceName].GetDeviceConnectedTo())
-					} else {
-						satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceName].GetDeviceConnectedTo())
-					}
+				connection := satellite.findISLConnection(forwardingChoice)
+				packetDropped, timeOfAttempt := connection.Send(packet, itemPopped.Value.TimeStamp)
+				if !packetDropped {
+					satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_SENT, &packet, satellite.Name, connection.GetDeviceConnectedTo())
 				} else {
-					satellite.logEvent(int(nextEventTime), SIMULATION_EVENT_DROPPED, &packet, satellite.Name, satellite.ISLInterfaces[interfaceName].GetDeviceConnectedTo())
+					satellite.logEvent(timeOfAttempt, SIMULATION_EVENT_DROPPED, &packet, satellite.Name, connection.GetDeviceConnectedTo())
 				}
 			} else {
 				connection := satellite.findGSLConnection(forwardingChoice)

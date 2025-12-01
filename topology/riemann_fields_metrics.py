@@ -1,9 +1,7 @@
 import csv, torch
 import numpy as np
 
-# small epsilon for numerical stability
-_eps = 1e-9
-K = 10**8 # Field constant coefficient
+K = 10**6 # Field constant coefficient
 
 def _ensure_device(x, device):
     t = torch.as_tensor(x, dtype=torch.float32, device=device)
@@ -40,6 +38,7 @@ def get_cartesian_positions(cartesian_positions_file, constellation_name, time_p
     return cartesian_ground_station_positions, cartesian_satellite_positions
 
 def get_flows_traffics(demand_matrix_file):
+    max_time = int(demand_matrix_file[:-4].split("#")[-1][:-1])
     flows_traffics = {}
     total_flows = {}
     with open(f'./input/{demand_matrix_file}', 'r') as file:
@@ -56,9 +55,8 @@ def get_flows_traffics(demand_matrix_file):
             flows_traffics[time_stamp].append(flow)
 
     avg_flows = []
-    total_time = len(flows_traffics)
     for (source, dest), total_traffic in total_flows.items():
-        avg_traffic = (total_traffic / total_time) * 2**20
+        avg_traffic = (total_traffic / max_time) * 2**20
         avg_flows.append((source, dest, avg_traffic))
 
     return flows_traffics, avg_flows
@@ -71,6 +69,7 @@ def avg_flow_traffics(flows_traffics, time_interval, time_period):
             sorted_flows.setdefault(time_stamp, []).append(flows_traffics[time])
 
     avg_flows = {}
+    time_interval_s = time_interval / 1000
     for time_stamp, flows_list in sorted_flows.items():
         flow_sums = {}
         for flows in flows_list:
@@ -78,7 +77,7 @@ def avg_flow_traffics(flows_traffics, time_interval, time_period):
                 if (source, dest) not in flow_sums:
                     flow_sums[(source, dest)] = 0
                 flow_sums[(source, dest)] += strength
-        avg_flows[time_stamp] = [(source, dest, flow_sums[(source, dest)] / len(flows_list)) for (source, dest) in flow_sums]
+        avg_flows[time_stamp] = [(source, dest, flow_sums[(source, dest)] / time_interval_s) for (source, dest) in flow_sums]
 
     return avg_flows
 
@@ -109,14 +108,14 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
 def scale_ground_stations_to_shell(ground_station_positions, shell_radius):
     scaled_positions = {}
     for key, pos in ground_station_positions.items():
-        r = torch.linalg.norm(pos).clamp_min(_eps)
+        r = torch.linalg.norm(pos)
         scaled_positions[key] = pos * (shell_radius / r)
     return scaled_positions
 
 
 def mirror_sat_to_base_plane(base_pos, other_pos):
     base_norm2 = (base_pos * base_pos).sum()
-    dot = (base_pos * other_pos).sum().clamp_min(_eps)
+    dot = (base_pos * other_pos).sum()
     factor = base_norm2 / dot
     return factor * other_pos
 
@@ -124,13 +123,13 @@ def mirror_sat_to_base_plane(base_pos, other_pos):
 def calculate_tangent_vector(point_pos, geo_pos):
     perp_plane = torch.cross(geo_pos, point_pos, dim=0)
     tangent = torch.cross(perp_plane, point_pos, dim=0)
-    return tangent / torch.linalg.norm(tangent).clamp_min(_eps)
+    return tangent / torch.linalg.norm(tangent)
 
 
 def calculate_geodesic_distance(point_a, point_b):
     half_line = torch.linalg.norm(point_a - point_b) / 2
-    R = torch.linalg.norm(point_a).clamp_min(_eps)
-    x = (half_line / R).clamp(-1 + 1e-7, 1 - 1e-7)
+    R = torch.linalg.norm(point_a)
+    x = (half_line / R)
     arc = 2 * torch.asin(x)
     return R * arc
 
@@ -142,14 +141,14 @@ def calculate_field(pos, src, dst, strength, K):
     d_src = calculate_geodesic_distance(pos, src)
     d_dst = calculate_geodesic_distance(pos, dst)
 
-    term_src = K * strength * t_dst / (d_src * d_src).clamp_min(_eps)
-    term_dst = K * strength * t_src / (d_dst * d_dst).clamp_min(_eps)
+    term_src = K * strength * t_dst / (d_src * d_src)
+    term_dst = K * strength * t_src / (d_dst * d_dst)
     return term_dst - term_src
 
 
 def calculate_perp_field(pos, field):
     perp_dir = torch.cross(field, pos, dim=0)
-    perp_dir = perp_dir / torch.linalg.norm(perp_dir).clamp_min(_eps)
+    perp_dir = perp_dir / torch.linalg.norm(perp_dir)
     return torch.linalg.norm(field) * perp_dir
 
 def calculate_per_flow_perp_field(base_pos, gs_positions, flows, K=1.0):
@@ -164,14 +163,14 @@ def calculate_per_flow_perp_field(base_pos, gs_positions, flows, K=1.0):
 def calculate_riemannian_distances(base_pos, other_pos, perp_fields):
     # mirror on tangent plane
     base_norm2 = (base_pos * base_pos).sum()
-    dot_base_other = (base_pos * other_pos).sum().clamp_min(1e-9)
+    dot_base_other = (base_pos * other_pos).sum()
     factor = base_norm2 / dot_base_other
     mirrored = factor * other_pos
 
     inter_vec = mirrored - base_pos
-    inter_vec_norm = torch.linalg.norm(inter_vec).clamp_min(_eps)
+    inter_vec_norm = torch.linalg.norm(inter_vec)
     
-    field_norms = torch.linalg.norm(perp_fields).clamp_min(_eps)
+    field_norms = torch.linalg.norm(perp_fields)
 
     inter_hop_stretch_factors = 2.0 * torch.exp(-field_norms)
     directional_components = torch.abs((inter_vec * perp_fields).sum(dim=1))
@@ -187,7 +186,7 @@ def choose_perpendicular_neighbor(base_id, chosen_id, sat_positions, neighbors):
 
     chosen_plane = mirror_sat_to_base_plane(base_pos, chosen_pos)
     base_to_chosen = chosen_plane - base_pos
-    base_to_chosen_norm = torch.linalg.norm(base_to_chosen).clamp_min(_eps)
+    base_to_chosen_norm = torch.linalg.norm(base_to_chosen)
 
     # Pack neighbors into tensor
     nb_pos = torch.stack([sat_positions[n] for n in neighbors])  # (N,3)
@@ -206,7 +205,7 @@ def choose_perpendicular_neighbor(base_id, chosen_id, sat_positions, neighbors):
     valid_ids = [n for i, n in enumerate(neighbors) if mask[i].item()]
 
     dots = torch.abs((valid_nb * base_to_chosen).sum(dim=1))
-    norms = (base_to_chosen_norm * torch.linalg.norm(valid_nb, dim=1)).clamp_min(_eps)
+    norms = (base_to_chosen_norm * torch.linalg.norm(valid_nb, dim=1))
 
     scores = dots / norms
     best_idx = torch.argmin(scores).item()
@@ -239,5 +238,5 @@ def calculate_distances_riemannian_satellites(
             dist_dict[other] = (perp_nb, d)
 
         distances[base] = dist_dict
-
+    
     return distances
