@@ -18,25 +18,27 @@ def get_pattern(origin_id, origin_orbit, neighbor_full_id):
 def apply_pattern(full_id, pattern, constellation_name, number_of_orbits, number_of_sats):
     base_orbit = int(full_id.split("-")[1])
     base_id = int(full_id.split("-")[2])
-    new_orbit = (base_orbit + pattern[0]) % number_of_orbits
-    new_id = (base_id + pattern[1]) % number_of_sats
+    orbit_pattern, id_pattern = pattern
+    new_orbit = (base_orbit + orbit_pattern) % number_of_orbits
+    new_id = (base_id + id_pattern) % number_of_sats
     return f"{constellation_name}-{new_orbit}-{new_id}"
 
 def find_best_patterns_of_orbit(orbit, base_satellite_id, number_of_sats, distances, constellation_name, number_of_orbits):
     pattern_scores = []
     neighbors_distances = distances[base_satellite_id]
-    for other_sat, (perp_sat, _) in neighbors_distances.items():
+    for other_sat, (perp_sat, distance) in neighbors_distances.items():
         pattern_acc_flag = True
         pattern = get_pattern(0, orbit, other_sat)
         perp_pattern = get_pattern(0, orbit, perp_sat)
-        pattern_avg_score = 0.0
+        pattern_avg_score = 0
         for sat_id in range(number_of_sats):
             sat_full_id = f"{constellation_name}-{orbit}-{sat_id}"
             pattern_sat = apply_pattern(sat_full_id, pattern, constellation_name, number_of_orbits, number_of_sats)
-            if pattern_sat not in distances[sat_full_id]:
+            perp_pattern_sat = apply_pattern(sat_full_id, perp_pattern, constellation_name, number_of_orbits, number_of_sats)
+            if pattern_sat not in distances[sat_full_id] or perp_pattern_sat not in distances[sat_full_id]:
                 pattern_acc_flag = False
                 break
-            distance = distances[sat_full_id][pattern_sat][1]
+            _, distance = distances[sat_full_id][pattern_sat]
             pattern_avg_score = (pattern_avg_score*sat_id + distance) / (sat_id + 1)
         if pattern_acc_flag:
             pattern_scores.append((pattern, perp_pattern, pattern_avg_score))
@@ -110,7 +112,5 @@ def generate_riemannian_static_topology(
             connect_pattern(chosen_pattern, orbit, topology_graph, constellation_name, number_of_sats, number_of_orbits)
 
     topology_graph = topology_graph.to_undirected()    
-    
-    # Possibly needs a second pass to ensure full degree utilization
-        
+
     return topology_graph

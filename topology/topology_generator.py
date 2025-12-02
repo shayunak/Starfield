@@ -1,6 +1,5 @@
 import csv, sys
 from datetime import datetime
-import torch
 import random_topology_generator as rtg
 import riemannian_dynamic_topology_generator as rdtg
 import riemannian_static_topology_generator as rstg
@@ -98,7 +97,7 @@ def riemannian_static_topology(distance_file, cartesian_positions_file, demand_m
     is_consistent_graph, df_graph, constellation_name, time_step, total_time, _, _, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
     consistent_distance_graph, satellite_nodes = df_graph, nodes
     if not is_consistent_graph:
-        consistent_distance_graph, satellite_nodes = cdg.get_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
+        consistent_distance_graph, satellite_nodes = cdg.get_static_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
 
     ground_station_positions, satellite_positions = rfm.get_cartesian_positions(cartesian_positions_file, constellation_name, total_time / 1000)
     _, avg_flows = rfm.get_flows_traffics(demand_matrix_file)

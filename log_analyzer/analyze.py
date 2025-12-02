@@ -106,7 +106,7 @@ def pairwise_jitter(perf_df: pd.DataFrame, overall: pd.DataFrame) -> None:
 
 def show_results(overall: pd.DataFrame, number_of_dropped_packets, number_of_delivered_packets, throughput) -> None:
     print("Analysis Results:")
-    display_cols = ["FromDevice", "ToDevice", "Latency_ms", "RTT_ms", "Hop_Count", "Effective_Latency_Factor", "Jitter", "Total_Packets"]
+    display_cols = ["FromDevice", "ToDevice", "Latency_ms", "RTT_ms", "Hop_Count", "Stretch_Factor", "Effective_Latency_Factor", "Jitter", "Total_Packets"]
     print(overall[display_cols].to_string(index=False))
     print("================================================================")
 

@@ -1,7 +1,8 @@
 import csv, torch
+import random
 import numpy as np
 
-K = 10**6 # Field constant coefficient
+K = 10**7 # Field constant coefficient
 
 def _ensure_device(x, device):
     t = torch.as_tensor(x, dtype=torch.float32, device=device)
@@ -199,7 +200,7 @@ def choose_perpendicular_neighbor(base_id, chosen_id, sat_positions, neighbors):
     mask = orient > 0
 
     if not mask.any():
-        return neighbors[0]
+        return random.choice(list(neighbors))
 
     valid_nb = base_to_nb[mask]
     valid_ids = [n for i, n in enumerate(neighbors) if mask[i].item()]
