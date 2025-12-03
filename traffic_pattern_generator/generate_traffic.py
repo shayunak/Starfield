@@ -137,6 +137,34 @@ def distort_traffic_gaussian(demand_file, packet_size, mean, stddev):
     output_file = f"distorted_gaussian({mean},{stddev})_{demand_file}"
     demand_df.to_csv(f"./input/{output_file}", index=False)
 
+def generate_distance_population_traffic(ground_station_population_file, buffer_size, packet_length, packet_transmission_time, time_period):
+    distribution = "distance_population"
+    gs_coords, ground_stations, number_of_ground_stations = read_ground_station_locs(ground_station_population_file)
+    population, _, _ = read_ground_station_population_file(ground_station_population_file)
+    #Weight by distance
+    D = np.zeros((number_of_ground_stations, number_of_ground_stations))
+    for i in range(number_of_ground_stations):
+        p1 = gs_coords[ground_stations[i]]
+        for j in range(i + 1, number_of_ground_stations):
+            p2 = gs_coords[ground_stations[j]]
+            distance = geodesic(p1, p2).kilometers
+            D[i, j] = distance
+            D[j, i] = distance
+    
+    W_D = D / np.sum(D)
+    np.fill_diagonal(W_D, 0)
+    # Weight by population
+    pair_population = np.outer(population, population)
+    total = np.sum(pair_population)
+    W_P = np.zeros((number_of_ground_stations, number_of_ground_stations), dtype=float)
+    if total > 0:
+        W_P = pair_population / total
+    np.fill_diagonal(W_P, 0)
+
+    W = W_D + W_P
+    W = W * buffer_size
+    generate_random_traffic(ground_stations, number_of_ground_stations, ground_station_population_file, W, distribution, buffer_size, packet_length, packet_transmission_time, time_period)
+
 def printHelp():    
     print("generate_traffic.py --help")
     print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
@@ -144,6 +172,7 @@ def printHelp():
     print("generate_traffic.py --exponential_hotspot [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)] ([decay_param])")
     print("generate_traffic.py --distance [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --distance_population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --distort_gaussian [demand_file] [packet_size(Kb)] [mean] [stddev]")
 
 if __name__ == "__main__":
@@ -166,6 +195,8 @@ if __name__ == "__main__":
         generate_distance_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
     elif sys.argv[1] == "--population" and len(sys.argv) == 7:  
         generate_population_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
+    elif sys.argv[1] == "--distance_population" and len(sys.argv) == 7:  
+        generate_distance_population_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
     elif sys.argv[1] == "--distort_gaussian" and len(sys.argv) == 5:
         distort_traffic_gaussian(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
     else:

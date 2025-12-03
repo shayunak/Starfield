@@ -81,6 +81,7 @@ def combine_hop_count_stretch_factor_effective_latency(overalls, results_dir, co
     plt.xlabel("Factor(Number)")
     plt.ylabel("CDF")
     plt.title(f"CDF of Stretch Factor, Hop Count, and Effective Latency Factor for {combination_name}", fontsize=10)
+    plt.xlim(left=0, right=15)
     plt.legend()
     plt.grid(True)
 
