@@ -179,15 +179,27 @@ class StaticTopologyGraphGenerator(TopologyGraphGenerator):
 class DynamicTopologyGraphGenerator(TopologyGraphGenerator):
     def __init__(self, topology_file):
         super().__init__(topology_file)
-
+        self.time_ranges = sorted(list(self.topology.keys()))
+    
     def load_topology(self, topology_file):
         topology_dataframe = pd.read_csv(f"./input/{topology_file}")
-        return topology_dataframe.groupby('TimeStamp(ms)').apply(lambda x: list(zip(x['FirstSatellite'], x['SecondSatellite']))).to_dict()
+        return topology_dataframe.groupby('TimeStamp(ms)').apply(lambda x: set(zip(x['FirstSatellite'], x['SecondSatellite'])), include_groups=False).to_dict()
+
+    def find_range(self, time_stamp):
+        for i in range(len(self.time_ranges)):
+            if i == len(self.time_ranges) - 1:
+                return self.time_ranges[i]
+            if time_stamp < self.time_ranges[i+1] and time_stamp >= self.time_ranges[i]:
+                return self.time_ranges[i]
+        
+        return 0
 
     def check_sanity(self, time_stamp_data, time_stamp):
         distance_pairs = set(zip(time_stamp_data.FirstDeviceId, time_stamp_data.SecondDeviceId))
+        time_stamp = self.find_range(time_stamp)
         if not (self.topology[time_stamp] <= distance_pairs):
             raise ValueError("Topology is not consistent with distances!")
 
     def check_isl_edge(self, first_satellite_name, second_satellite_name, time_stamp):
+        time_stamp = self.find_range(time_stamp)
         return (first_satellite_name, second_satellite_name) in self.topology[time_stamp]

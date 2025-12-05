@@ -22,7 +22,7 @@ def hop_count_stretch_factor_effective_latency_cdf_plot(overall: pd.DataFrame,re
     plt.plot(effective_x, effective_cdf, linestyle=':', label="Effective Latency Factor CDF", color='red')
     plt.xlabel("Factor(Number)")
     plt.ylabel("CDF")
-    plt.title("CDF of Stretch Factor, Hop Count, and Effective Latency Factor")
+    plt.title("CDF of Stretch Factor, Hop Count, and Effective Latency Factor", fontsize=10)
     plt.legend()
     plt.grid(True)
 
@@ -80,9 +80,9 @@ def combine_hop_count_stretch_factor_effective_latency(overalls, results_dir, co
 
     plt.xlabel("Factor(Number)")
     plt.ylabel("CDF")
-    plt.title(f"CDF of Stretch Factor, Hop Count, and Effective Latency Factor for {combination_name}", fontsize=10)
+    plt.title(f"CDF of Stretch Factor, Hop Count, and Effective Latency Factor for {combination_name}", fontsize=8)
     plt.xlim(left=0, right=15)
-    plt.legend()
+    plt.legend(fontsize=6)
     plt.grid(True)
 
     plt.savefig(f"{results_dir}/combined_hop_stretch_effective_cdf_plot.png")

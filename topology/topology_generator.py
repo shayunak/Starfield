@@ -126,7 +126,7 @@ def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_
     avg_interval_flows = rfm.avg_flow_traffics(flows_traffics, time_interval * 1000, time_period * 1000)
 
     topology_graphs = []
-    for time_stamp in range(0, time_period * 1000 + 1, time_interval * 1000):
+    for time_stamp in range(0, time_period * 1000, time_interval * 1000):
         traffic_flow = avg_interval_flows[time_stamp]
         consistent_distance_graph = consistent_distance_graphs[time_stamp]
         middle_of_interval = time_stamp + (time_interval // 2) * 1000

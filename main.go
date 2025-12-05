@@ -117,10 +117,10 @@ func forwardingSettingsRunGridPlus(consellationFile string, groundStationFile st
 
 func printHelp() {
 	fmt.Println("main.go --help")
-	fmt.Println("main.go --positions --[cartesian/spherical] [consellation config file] [ground station locations] [time step (ms)] [total simulation time (s)]")
-	fmt.Println("main.go --distances [consellation config file] [ground station locations] [time step (ms)] [total simulation time (s)]")
-	fmt.Println("main.go --forwarding [consellation config file] [ground station locations] [traffic generator file] [forwarding folder] [ISL Topology] [time step (ms)] [total simulation time (s)]")
-	fmt.Println("main.go --forwarding --grid_plus [consellation config file] [ground station locations] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --positions --[cartesian/spherical] [constellation config file] [ground station locations] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --distances [constellation config file] [ground station locations] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --forwarding [constellation config file] [ground station locations] [traffic generator file] [forwarding folder] [ISL Topology] [time step (ms)] [total simulation time (s)]")
+	fmt.Println("main.go --forwarding --grid_plus [constellation config file] [ground station locations] [traffic generator file] [forwarding folder] [time step (ms)] [total simulation time (s)]")
 }
 
 func main() {

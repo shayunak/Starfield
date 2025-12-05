@@ -132,8 +132,8 @@ def generate_population_traffic(ground_station_population_file, buffer_size, pac
 
 def distort_traffic_gaussian(demand_file, packet_size, mean, stddev):
     demand_df = pd.read_csv(f"./input/{demand_file}")
-    guassian_noise = np.random.normal(loc=mean, scale=stddev, size=len(demand_df))
-    demand_df['Length(Mb)'] = demand_df['Length(Mb)'] + guassian_noise*packet_size/1000.0
+    gaussian_noise = np.random.normal(loc=mean, scale=stddev, size=len(demand_df))
+    demand_df['Length(Mb)'] = np.clip(demand_df['Length(Mb)'] + gaussian_noise * packet_size / 1000.0, 0, None)
     output_file = f"distorted_gaussian({mean},{stddev})_{demand_file}"
     demand_df.to_csv(f"./input/{output_file}", index=False)
 
@@ -197,8 +197,8 @@ if __name__ == "__main__":
         generate_population_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
     elif sys.argv[1] == "--distance_population" and len(sys.argv) == 7:  
         generate_distance_population_traffic(sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
-    elif sys.argv[1] == "--distort_gaussian" and len(sys.argv) == 5:
-        distort_traffic_gaussian(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
+    elif sys.argv[1] == "--distort_gaussian" and len(sys.argv) == 6:
+        distort_traffic_gaussian(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5]))
     else:
         print("Invalid Option or Missing Arguments!")
         printHelp()
