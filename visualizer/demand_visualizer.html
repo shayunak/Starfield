@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Cesium Vector Field Visualization (Time Range)</title>
+  <title>Cesium Demand Visualization (Time Range)</title>
   
   <!-- CesiumJS -->
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Cesium.js"></script>
@@ -122,21 +122,21 @@
         <input id="positionFile" type="file" accept=".csv" />
       </div>
       <div style="display: flex; gap: 10px; align-items: center;">
-        <label for="fieldFile">Vector Field File:</label>
-        <input id="fieldFile" type="file" accept=".csv" />
+        <label for="demandFile">Demand File:</label>
+        <input id="demandFile" type="file" accept=".csv" />
       </div>
       <div style="display: flex; gap: 10px; align-items: center;">
         <label for="time">Time (s):</label>
         <input id="time" type="number" placeholder="e.g. 2" />
       </div>
       <div style="display: flex; gap: 10px;">
-        <button id="loadBtn" disabled>Display Satellites & Vector Fields</button>
+        <button id="loadBtn" disabled>Display Demands</button>
       </div>
-      <small id="statusMsg">Please select position.csv and field.csv files and enter specific time</small>
+      <small id="statusMsg">Please select position.csv and demand.csv files and enter specific time</small>
     </div>
   </div>
 
-  <script type="module" src="field_visualizer.js"></script>
+  <script type="module" src="demand_visualizer.js"></script>
   <script>
     const toggleBtn = document.getElementById('menuToggle');
     const sideMenu = document.getElementById('sideMenu');

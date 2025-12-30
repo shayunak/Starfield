@@ -91,17 +91,17 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
         "Field_Magnitude": []
     }
     
-    shell_radius = np.linalg.norm(list(satellite_positions.values())[0])
+    shell_radius = torch.linalg.norm(next(iter(satellite_positions.values()))).item()
     scaled_ground_station_positions = scale_ground_stations_to_shell(ground_station_positions, shell_radius)
 
     for sat in satellite_nodes:
-        field = calculate_field(satellite_positions[sat], scaled_ground_station_positions[source], scaled_ground_station_positions[dest], strength)
-        field_magnitude = np.linalg.norm(field)  # Normalize the field vector
+        field = calculate_field(satellite_positions[sat], scaled_ground_station_positions[source], scaled_ground_station_positions[dest], strength, K=K)
+        field_magnitude = torch.linalg.norm(field).item()  # Normalize the field vector
         field = field / field_magnitude
         fields["Satellite"].append(sat)
-        fields["Field_X"].append(field[0])
-        fields["Field_Y"].append(field[1])
-        fields["Field_Z"].append(field[2])
+        fields["Field_X"].append(field[0].item())
+        fields["Field_Y"].append(field[1].item())
+        fields["Field_Z"].append(field[2].item())
         fields["Field_Magnitude"].append(field_magnitude)
 
     return fields
@@ -123,6 +123,7 @@ def mirror_sat_to_base_plane(base_pos, other_pos):
 
 def calculate_tangent_vector(point_pos, geo_pos):
     perp_plane = torch.cross(geo_pos, point_pos, dim=0)
+    perp_plane = perp_plane / torch.linalg.norm(perp_plane)
     tangent = torch.cross(perp_plane, point_pos, dim=0)
     return tangent / torch.linalg.norm(tangent)
 
@@ -144,6 +145,7 @@ def calculate_field(pos, src, dst, strength, K):
 
     term_src = K * strength * t_dst / (d_src * d_src)
     term_dst = K * strength * t_src / (d_dst * d_dst)
+
     return term_dst - term_src
 
 
