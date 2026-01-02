@@ -1,7 +1,10 @@
 import csv, torch
+from time import time
 import random
 
-K = 10**6 # Field constant coefficient
+K = 10**7 # Field constant coefficient
+INC_DIM_RATE = 40 # Diminish rate for inclination closeness feature
+BOUNDARY_STRENGTH = 1
 
 def _ensure_device(x, device):
     t = torch.as_tensor(x, dtype=torch.float32, device=device)
@@ -81,7 +84,7 @@ def avg_flow_traffics(flows_traffics, time_interval, time_period):
 
     return avg_flows
 
-def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_station_positions, source, dest, strength):
+def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_station_positions, source, dest, strength, inclination):
     fields = {
         "Satellite": [],
         "Field_X": [],
@@ -92,9 +95,10 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
     
     shell_radius = torch.linalg.norm(next(iter(satellite_positions.values()))).item()
     scaled_ground_station_positions = scale_ground_stations_to_shell(ground_station_positions, shell_radius)
+    inclination_sin = torch.sin(torch.deg2rad(torch.tensor(inclination, device=(next(iter(satellite_positions.values())).device))))
 
     for sat in satellite_nodes:
-        field = calculate_field(satellite_positions[sat], scaled_ground_station_positions[source], scaled_ground_station_positions[dest], strength, K=K)
+        field = calculate_field(satellite_positions[sat], scaled_ground_station_positions[source], scaled_ground_station_positions[dest], strength, K=K, inclination_sin=inclination_sin, shell_radius=shell_radius)
         field_magnitude = torch.linalg.norm(field).item()  # Normalize the field vector
         field = field / field_magnitude
         fields["Satellite"].append(sat)
@@ -105,13 +109,19 @@ def calculate_fields_at_satellites(satellite_nodes, satellite_positions, ground_
 
     return fields
 
+def calculate_inclination_closeness(satellite_position, inclination_sin, shell_radius):
+    sat_z = torch.abs(satellite_position[2])
+    closeness = inclination_sin - sat_z / shell_radius
+    closeness_ratio = torch.exp(-INC_DIM_RATE * closeness)
+
+    return closeness_ratio
+
 def scale_ground_stations_to_shell(ground_station_positions, shell_radius):
     scaled_positions = {}
     for key, pos in ground_station_positions.items():
         r = torch.linalg.norm(pos)
         scaled_positions[key] = pos * (shell_radius / r)
     return scaled_positions
-
 
 def mirror_sat_to_base_plane(base_pos, other_pos):
     base_norm2 = (base_pos * base_pos).sum()
@@ -134,8 +144,7 @@ def calculate_geodesic_distance(point_a, point_b):
     arc = 2 * torch.asin(x)
     return R * arc
 
-
-def calculate_field(pos, src, dst, strength, K):
+def calculate_field(pos, src, dst, strength, K, inclination_sin, shell_radius):
     t_src = calculate_tangent_vector(pos, src)
     t_dst = calculate_tangent_vector(pos, dst)
 
@@ -145,7 +154,13 @@ def calculate_field(pos, src, dst, strength, K):
     term_src = K * strength * t_dst / (d_src * d_src)
     term_dst = K * strength * t_src / (d_dst * d_dst)
 
-    return term_dst - term_src
+    field = term_src - term_dst
+    closeness_ratio = calculate_inclination_closeness(pos, inclination_sin, shell_radius)
+    X, Y = pos[0], pos[1]
+    flat_radius = torch.sqrt(X*X + Y*Y)
+    longitude_tangent = torch.tensor([-Y / flat_radius, X / flat_radius, 0.0], device=pos.device)
+
+    return  field + BOUNDARY_STRENGTH * closeness_ratio * torch.dot(field, longitude_tangent) * longitude_tangent
 
 
 def calculate_perp_field(pos, field):
@@ -153,11 +168,11 @@ def calculate_perp_field(pos, field):
     perp_dir = perp_dir / torch.linalg.norm(perp_dir)
     return torch.linalg.norm(field) * perp_dir
 
-def calculate_per_flow_perp_field(base_pos, gs_positions, flows, K=1.0):
+def calculate_per_flow_perp_field(base_pos, gs_positions, flows, inclination_sin, shell_radius, K=1.0):
     """Vectorized across flows."""
     perp_list = []
     for src, dst, strength in flows:
-        f = calculate_field(base_pos, gs_positions[src], gs_positions[dst], strength, K=K)
+        f = calculate_field(base_pos, gs_positions[src], gs_positions[dst], strength, K=K, inclination_sin=inclination_sin, shell_radius=shell_radius)
         perp = calculate_perp_field(base_pos, f)
         perp_list.append(perp)
     return torch.stack(perp_list) if perp_list else torch.zeros((0,3), device=base_pos.device)
@@ -218,17 +233,19 @@ def calculate_distances_riemannian_satellites(
     satellite_nodes,
     sat_positions,
     gs_positions,
+    inclination,
     traffic_flows,
     neighbor_graph
 ):
     shell_radius = torch.linalg.norm(next(iter(sat_positions.values()))).item()
     gs_scaled = scale_ground_stations_to_shell(gs_positions, shell_radius)
+    inclination_sin = torch.sin(torch.deg2rad(torch.tensor(inclination, device=(next(iter(sat_positions.values())).device))))
 
     distances = {}
 
     for base in satellite_nodes:
         base_pos = sat_positions[base]
-        perp_fields = calculate_per_flow_perp_field(base_pos, gs_scaled, traffic_flows, K=K)
+        perp_fields = calculate_per_flow_perp_field(base_pos, gs_scaled, traffic_flows, inclination_sin, shell_radius, K=K)
 
         dist_dict = {}
         for other in neighbor_graph[base]:

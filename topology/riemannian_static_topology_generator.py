@@ -85,14 +85,14 @@ def choose_next_pattern(orbit, closest_patterns, closest_perp_patterns, num_isls
 
 def generate_riemannian_static_topology(
         satellite_nodes, number_of_orbits, number_of_sats, constellation_name, consistent_distance_graph, satellite_positions, 
-        ground_station_positions, traffic_flow, num_isls
+        ground_station_positions, traffic_flow, num_isls, inclination
     ):
     topology_graph = nx.DiGraph()
     topology_graph.add_nodes_from(satellite_nodes)
 
     # Calculate riemannian distances for each pair of satellites
     distances = calculate_distances_riemannian_satellites(
-        satellite_nodes, satellite_positions, ground_station_positions, traffic_flow, consistent_distance_graph
+        satellite_nodes, satellite_positions, ground_station_positions, inclination, traffic_flow, consistent_distance_graph
     )
 
     for orbit in range(number_of_orbits):

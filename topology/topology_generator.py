@@ -76,7 +76,7 @@ def random_static_topology(distance_file, num_isls):
     filename = f"RandomStaticTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}.csv"
     save_static_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
     
-def riemannian_fields(cartesian_positions_file, source, destination, time_period, time_interval):
+def riemannian_fields(cartesian_positions_file, source, destination, inclination, time_period, time_interval):
     splited_filename = cartesian_positions_file[:-4].split("#")
     constellation_name, orbital_structure = splited_filename[2].split("(")
     num_orbits, num_satellites = map(int, orbital_structure.rstrip(")").split(","))
@@ -87,13 +87,13 @@ def riemannian_fields(cartesian_positions_file, source, destination, time_period
     for time_stamp in range(0, time_period*1000 + 1, time_interval*1000):
         satellite_position = satellite_positions[time_stamp]
         ground_station_position = ground_station_positions[time_stamp]
-        fields = rfm.calculate_fields_at_satellites(satellite_nodes, satellite_position, ground_station_position, source, destination, 10.0**6)
+        fields = rfm.calculate_fields_at_satellites(satellite_nodes, satellite_position, ground_station_position, source, destination, 10.0**6, inclination)
         fields_over_time[time_stamp] = fields
 
     filename = f"RiemannianFields#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites})#({source},{destination})#{time_period}s(every){time_interval}s.csv"
     save_fields_to_file(fields_over_time, f'./generated/{filename}')
 
-def riemannian_static_topology(distance_file, cartesian_positions_file, demand_matrix_file, num_isls):
+def riemannian_static_topology(distance_file, cartesian_positions_file, demand_matrix_file, num_isls, inclination):
     is_consistent_graph, df_graph, constellation_name, time_step, total_time, _, _, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
     consistent_distance_graph, satellite_nodes = df_graph, nodes
     if not is_consistent_graph:
@@ -107,13 +107,13 @@ def riemannian_static_topology(distance_file, cartesian_positions_file, demand_m
     topology_graph = rstg.generate_riemannian_static_topology(
         satellite_nodes, num_orbits, num_satellites, constellation_name, 
         consistent_distance_graph, initial_satellite_position, 
-        initial_ground_station_position, avg_flows, num_isls
+        initial_ground_station_position, avg_flows, num_isls, inclination
     )
 
     filename = f"RiemannianStaticTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{constellation_name}({num_orbits},{num_satellites}).csv"
     save_static_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
 
-def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_matrix_file, num_isls, time_period, time_interval):
+def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_matrix_file, num_isls, inclination, time_period, time_interval):
     is_consistent_graph, df_graph, constellation_name, time_step, total_time, _, file_time, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
     consistent_distance_graphs, satellite_nodes = df_graph, nodes
     if is_consistent_graph and (file_time != time_interval*1000 or total_time != time_period*1000):
@@ -134,7 +134,7 @@ def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_
         ground_station_position = ground_station_positions[middle_of_interval]
         topology_graph = rdtg.generate_riemannian_dynamic_topology(
             satellite_nodes, consistent_distance_graph, satellite_position, 
-            ground_station_position, traffic_flow, num_isls
+            ground_station_position, traffic_flow, num_isls, inclination
         )
         topology_graphs.append((time_stamp, topology_graph))
 
@@ -144,9 +144,9 @@ def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_
 def printHelp():
     print("topology_generator.py --help")
     print("topology_generator.py --random_static [distance_file] [number of ISLs]")
-    print("topology_generator.py --riemannian_static [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs]")
-    print("topology_generator.py --riemannian_dynamic [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [time_period(s)] [time_interval(s)]")
-    print("topology_generator.py --riemannian_fields [cartesian_positions_file] [source] [destination] [time_period(s)] [time_interval(s)]")
+    print("topology_generator.py --riemannian_static [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)]")
+    print("topology_generator.py --riemannian_dynamic [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)] [time_period(s)] [time_interval(s)]")
+    print("topology_generator.py --riemannian_fields [cartesian_positions_file] [source] [destination] [inclination(deg)] [time_period(s)] [time_interval(s)]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -158,12 +158,12 @@ if __name__ == "__main__":
         printHelp() 
     elif sys.argv[1] == "--random_static" and len(sys.argv) == 4:
         random_static_topology(sys.argv[2], int(sys.argv[3]))
-    elif sys.argv[1] == "--riemannian_static" and len(sys.argv) == 6:
-        riemannian_static_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
-    elif sys.argv[1] == "--riemannian_dynamic" and len(sys.argv) == 8:
-        riemannian_dynamic_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]))
-    elif sys.argv[1] == "--riemannian_fields" and len(sys.argv) == 7:
-        riemannian_fields(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), int(sys.argv[6]))
+    elif sys.argv[1] == "--riemannian_static" and len(sys.argv) == 7:
+        riemannian_static_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), float(sys.argv[6]))
+    elif sys.argv[1] == "--riemannian_dynamic" and len(sys.argv) == 9:
+        riemannian_dynamic_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), float(sys.argv[6]), int(sys.argv[7]), int(sys.argv[8]))
+    elif sys.argv[1] == "--riemannian_fields" and len(sys.argv) == 8:
+        riemannian_fields(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]))
     else:
         print("Invalid Option or Missing Arguments!")
         printHelp()

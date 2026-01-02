@@ -143,7 +143,6 @@ def combine_satellite_usage(overalls, results_dir, combination_name: str) -> Non
     plt.xlabel("Links ordered by usage")
     plt.ylabel("No. of packets using a link")
     plt.title(f'Inter-Satellite Link (ISL) Usage Frequency for {combination_name}', fontsize=10)
-    plt.xlim(left=0, right=2)
     plt.grid(True)
     plt.legend()
 

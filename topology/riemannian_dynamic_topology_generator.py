@@ -58,14 +58,14 @@ def get_closest_distances(distances):
 
 def generate_riemannian_dynamic_topology(
         satellite_nodes, consistent_distance_graph, satellite_positions, 
-        ground_station_positions, traffic_flow, num_isls
+        ground_station_positions, traffic_flow, num_isls, inclination
     ):
 
     topology_graph = nx.DiGraph()
     topology_graph.add_nodes_from(satellite_nodes)
     # Calculate Riemannian distances for each satellite, and their corresponding perpendicular satellites
     distances = calculate_distances_riemannian_satellites(
-        satellite_nodes, satellite_positions, ground_station_positions, traffic_flow, consistent_distance_graph
+        satellite_nodes, satellite_positions, ground_station_positions, inclination, traffic_flow, consistent_distance_graph
     )
     closest_satellites, closest_perp_satellite = get_closest_distances(distances)
 
