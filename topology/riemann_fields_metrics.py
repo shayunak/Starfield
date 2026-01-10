@@ -1,5 +1,4 @@
 import csv, torch
-from time import time
 import random
 
 K = 10**7 # Field constant coefficient
