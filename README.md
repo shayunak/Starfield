@@ -117,7 +117,7 @@ The module generates ground station to ground station traffic based on a source-
 > `./traffic_pattern_generator/generate_traffic.py --distort_gaussian [demand_file] [packet_size(Kb)] [mean(mu)] [stddev(sigma)]"`
 - **--single_uniform:** generates a uniform traffic matrix between a source and destination 
 - **--uniform:** generates a uniform traffic matrix
-- **--exponential_hotspot:** generates a probabilistic weighted matrix with larger weights at the top left side of the matrix (hotspots), with $$e^{\frac{i+j}{m}}$$, where $$i$$, and $$j$$ are the row and column of the matrix, and $$m$$ number of ground stations
+- **--exponential_hotspot:** generates a probabilistic weighted matrix with larger weights at the top left side of the matrix (hotspots), with $$e^{-\frac{i+j}{m}}$$, where $$i$$, and $$j$$ are the row and column of the matrix, and $$m$$ number of ground stations
 - **--distance:** generates a distance-weighted probabilistic traffic matrix
 - **--population:** generates a population-weighted traffic matrix
 - **--distance_population:** generates a population&distance-weighted traffic matrix
