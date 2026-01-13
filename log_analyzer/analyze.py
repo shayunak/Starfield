@@ -211,7 +211,7 @@ def analyze(sim_csv: Path, gs_csv: Path, distance_csv: Path) -> None:
 # Command line help
 def printHelp():
     print("analyze.py --help")
-    print("analyze.py --analyze [simulation_summary_file.csv] [ground_stations_file.csv] [distances_file.csv]")
+    print("analyze.py --analyze [simulation_summary_file] [ground_stations_file] [distances_file]")
     print("analyze.py --combine [name_of_combination] [<overall_folder1> ...] [<overall_name1> ...]")
 
 if __name__ == "__main__":

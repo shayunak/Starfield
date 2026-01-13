@@ -8,8 +8,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/shayunak/SatSimGo/actors"
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/actors"
+
+	"SatSimGo/helpers"
 )
 
 type GroundStationList []actors.IGroundStation

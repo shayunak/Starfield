@@ -4,7 +4,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/helpers"
 )
 
 func DijkstraModifiedOnGridPlus(nextBestHop string, timeStamp float64, interfaces []string, anomalyCalculation helpers.IAnomalyCalculation) string {

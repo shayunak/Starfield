@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shayunak/SatSimGo/connections"
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/connections"
+
+	"SatSimGo/helpers"
 )
 
 type Logger struct {

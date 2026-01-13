@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/shayunak/SatSimGo/connections"
+	"SatSimGo/connections"
 )
 
 type Linker struct {

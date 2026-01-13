@@ -6,9 +6,11 @@ import (
 	"os"
 	"sync"
 
-	"github.com/shayunak/SatSimGo/actors"
-	"github.com/shayunak/SatSimGo/connections"
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/actors"
+
+	"SatSimGo/connections"
+
+	"SatSimGo/helpers"
 )
 
 func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroundStationCalculation) {

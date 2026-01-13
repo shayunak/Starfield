@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/shayunak/SatSimGo/actors"
+	"SatSimGo/actors"
 )
 
 func openTrafficGeneratorFile(fileName string) (*os.File, *csv.Reader) {

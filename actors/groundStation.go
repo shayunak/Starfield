@@ -6,8 +6,8 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/shayunak/SatSimGo/connections"
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/connections"
+	"SatSimGo/helpers"
 )
 
 type TrafficEntry struct {

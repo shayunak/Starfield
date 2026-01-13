@@ -173,7 +173,7 @@ def printHelp():
     print("generate_traffic.py --distance [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
     print("generate_traffic.py --distance_population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --distort_gaussian [demand_file] [packet_size(Kb)] [mean] [stddev]")
+    print("generate_traffic.py --distort_gaussian [demand_file] [packet_size(Kb)] [mean(mu)] [stddev(sigma)]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

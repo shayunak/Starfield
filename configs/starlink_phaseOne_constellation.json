@@ -9,7 +9,7 @@
         "min_altitude_isl": 80000.0,
         "inclination": 53,
         "min_ascension_angle": 0.0,
-        "max_ascension_angle": 360.0,
+        "max_ascension_angle": 355.0,
         "number_of_orbits": 72,
         "number_of_satellites_per_orbit": 22,
         "phase_diff_enabled": true

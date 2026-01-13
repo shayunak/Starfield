@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/shayunak/SatSimGo/connections"
+	"SatSimGo/connections"
 )
 
 func openISLTopologyFile(fileName string) (*os.File, *csv.Reader, bool) {

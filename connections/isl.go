@@ -3,7 +3,7 @@ package connections
 import (
 	"math"
 
-	"github.com/shayunak/SatSimGo/helpers"
+	"SatSimGo/helpers"
 )
 
 type ISL struct {

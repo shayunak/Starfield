@@ -1,3 +1,3 @@
-module github.com/shayunak/SatSimGo
+module SatSimGo
 
 go 1.22.1

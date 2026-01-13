@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/shayunak/SatSimGo/actors"
+	"SatSimGo/actors"
 )
 
 func LoadForwardingTableInMemory(forwardingFileName string) map[int]actors.ForwardingEntry {
