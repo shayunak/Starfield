@@ -1,7 +1,7 @@
 const DEMAND_WIDTH_FACTOR = 100;
 
 // 1) Set Cesium Ion Token
-Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwNzE4MGEwYy1jYmUyLTQ1NDItYjA2Ny00NWZmZjkxNDI2ZjEiLCJpZCI6MzA2ODU2LCJpYXQiOjE3NjA2NzM2NzN9.AkFaPEQ-QmFbL9LfzPqhSYRGyu65YyW2-ogXwG2XuQ0';
+Cesium.Ion.defaultAccessToken = '';
 
 // 2) Initialize Viewer
 const viewer = new Cesium.Viewer('cesiumContainer', {
