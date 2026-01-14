@@ -3,7 +3,7 @@ package connections
 import (
 	"math"
 
-	"SatSimGo/helpers"
+	"Starfield/helpers"
 )
 
 type GeoSpec struct {

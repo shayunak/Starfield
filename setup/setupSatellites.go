@@ -3,8 +3,8 @@ package setup
 import (
 	"math"
 
-	"SatSimGo/actors"
-	"SatSimGo/helpers"
+	"Starfield/actors"
+	"Starfield/helpers"
 )
 
 type SatelliteList []actors.ISatellite

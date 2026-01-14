@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"SatSimGo/connections"
+	"Starfield/connections"
 )
 
 type Linker struct {

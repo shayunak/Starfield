@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"SatSimGo/connections"
+	"Starfield/connections"
 
-	"SatSimGo/helpers"
+	"Starfield/helpers"
 )
 
 type Logger struct {

@@ -6,11 +6,11 @@ import (
 	"os"
 	"sync"
 
-	"SatSimGo/actors"
+	"Starfield/actors"
 
-	"SatSimGo/connections"
+	"Starfield/connections"
 
-	"SatSimGo/helpers"
+	"Starfield/helpers"
 )
 
 func initCalculators(config Config) (helpers.IAnomalyCalculation, helpers.IGroundStationCalculation) {

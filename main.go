@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"SatSimGo/setup"
+	"Starfield/setup"
 )
 
 func calculateCartesianPositionsSettingsRun(consellationFile string, groundStationFile string, timeStepString string, totalSimulationTimeString string) {

@@ -8,9 +8,9 @@ import (
 	"os"
 	"strconv"
 
-	"SatSimGo/actors"
+	"Starfield/actors"
 
-	"SatSimGo/helpers"
+	"Starfield/helpers"
 )
 
 type GroundStationList []actors.IGroundStation

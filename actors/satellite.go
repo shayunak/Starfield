@@ -7,9 +7,9 @@ import (
 	"math"
 	"reflect"
 
-	"SatSimGo/connections"
+	"Starfield/connections"
 
-	"SatSimGo/helpers"
+	"Starfield/helpers"
 )
 
 type ForwardingEntry map[string]string
