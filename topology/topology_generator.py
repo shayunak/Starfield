@@ -1,4 +1,4 @@
-import csv, sys
+import csv, sys, os
 from datetime import datetime
 import random_topology_generator as rtg
 import riemannian_dynamic_topology_generator as rdtg
@@ -7,6 +7,8 @@ import consistent_distance_graph_generator as cdg
 import riemann_fields_metrics as rfm
 
 def save_static_topology_to_file(graph, nodes, filename):
+    if not os.path.exists("./input"):
+        os.makedirs("./input")
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['FirstSatellite', 'SecondSatellite'])
@@ -17,6 +19,8 @@ def save_static_topology_to_file(graph, nodes, filename):
     print(f"Topology saved to {filename}")
 
 def save_dynamic_topology_to_file(graphs, nodes, filename):
+    if not os.path.exists("./input"):
+        os.makedirs("./input")
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
         if len(graphs) > 1:

@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import pandas as pd
 import numpy as np
 import csv
@@ -28,13 +28,17 @@ def read_ground_station_population_file(ground_station_population_file):
     return population, ground_stations, len(ground_stations)
 
 def create_output_file_single_traffic(distribution, source, destination, buffer_size, packet_length, packet_transmission_time, time_period):
-        traffic_file = open(f"./input/{distribution}_{source}_to_{destination}_demand#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
-        csv_writer = csv.writer(traffic_file)
-        csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(Mb)"])
+    if not os.path.exists("./input"):
+        os.makedirs("./input")
+    traffic_file = open(f"./input/{distribution}_{source}_to_{destination}_demand#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
+    csv_writer = csv.writer(traffic_file)
+    csv_writer.writerow(["Timestamp(ms)", "Source", "Destination", "Length(Mb)"])
 
-        return csv_writer, traffic_file
+    return csv_writer, traffic_file
 
 def create_output_file(distribution, ground_station_file, buffer_size, packet_length, packet_transmission_time, time_period):
+    if not os.path.exists("./input"):
+        os.makedirs("./input")
     file_name_without_csv = ground_station_file[:-4]
     traffic_file = open(f"./input/{distribution}_demand#{file_name_without_csv}#{buffer_size}#{packet_length}Kb#{packet_transmission_time}ms#{time_period}s.csv", "w", newline= "")
     csv_writer = csv.writer(traffic_file)
@@ -167,13 +171,13 @@ def generate_distance_population_traffic(ground_station_population_file, buffer_
 
 def printHelp():    
     print("generate_traffic.py --help")
-    print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --exponential_hotspot [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)] ([decay_param])")
-    print("generate_traffic.py --distance [ground_station_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --distance_population [ground_station_population_file] [buffer_size] [packet_length(Kb)] [packet_transmission_time(ms)] [time_period(s)]")
-    print("generate_traffic.py --distort_gaussian [demand_file] [packet_size(Kb)] [mean(mu)] [stddev(sigma)]")
+    print("generate_traffic.py --single_uniform [source] [destination] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --uniform [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --exponential_hotspot [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)] ([decay_param])")
+    print("generate_traffic.py --distance [ground_station_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --population [ground_station_population_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --distance_population [ground_station_population_file] [buffer_size] [packet_length(KB)] [packet_transmission_time(ms)] [time_period(s)]")
+    print("generate_traffic.py --distort_gaussian [demand_file] [packet_size(KB)] [mean(mu)] [stddev(sigma)]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
