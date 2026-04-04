@@ -87,7 +87,7 @@ def motif_topology(distance_file, initial_distance_file, ground_station_position
     if not is_consistent_graph:
         consistent_distance_graph, satellite_nodes = cdg.get_static_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
 
-    base_graph = cdg.read_initial_satellite_distances(initial_distance_file, constellation_name)
+    base_graph = cdg.read_initial_satellite_distances(initial_distance_file)
     ground_station_positions, ground_stations = cdg.read_ground_station_positions(ground_station_positions)
     topology_graph = mtg.generate_motif_topology(base_graph, satellite_nodes, num_orbits, num_satellites, constellation_name, consistent_distance_graph, ground_stations, ground_station_positions, alpha, num_isls)
 

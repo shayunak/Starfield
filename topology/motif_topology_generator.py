@@ -44,7 +44,7 @@ def evaluate_motif_topology(topology_graph, pairwise_gs_distances, ground_statio
     gs_subset = set(ground_stations)
 
     for u in gs_subset:
-        lengths, paths = nx.single_source_dijkstra(topology_graph, u, weight='weight')
+        lengths, paths = nx.single_source_dijkstra(topology_graph, u, weight='Distance(m)')
 
         for v in gs_subset:
             if u < v and v in lengths:  # avoid duplicates

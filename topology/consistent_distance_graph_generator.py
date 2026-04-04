@@ -102,7 +102,7 @@ def read_ground_station_positions(filename):
     
     return ground_station_positions, ground_stations
 
-def read_initial_satellite_distances(filename, constellation_name):
+def read_initial_satellite_distances(filename):
     distance_df = pd.read_csv(
         f"./generated/{filename}",
         engine="pyarrow",
