@@ -79,7 +79,7 @@ func (orbitalCalc *OrbitalCalculations) GetNumberOfOrbits() int {
 }
 
 func (orbitalCalc *OrbitalCalculations) isOrbitAngleValid(angle float64) bool {
-	return angle >= orbitalCalc.MinAscensionAngle && angle < orbitalCalc.MaxAscensionAngle
+	return angle >= orbitalCalc.MinAscensionAngle && angle <= (orbitalCalc.MaxAscensionAngle+0.001) // for computation precision issues
 }
 
 func (orbitalCalc *OrbitalCalculations) ConvertOrbitIdToAscension(orbitId int) float64 {

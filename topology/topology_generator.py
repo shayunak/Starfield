@@ -1,6 +1,7 @@
 import csv, sys, os
 from datetime import datetime
 import random_topology_generator as rtg
+import motif_topology_generator as mtg
 import riemannian_dynamic_topology_generator as rdtg
 import riemannian_static_topology_generator as rstg
 import consistent_distance_graph_generator as cdg
@@ -79,6 +80,19 @@ def random_static_topology(distance_file, num_isls):
 
     filename = f"RandomStaticTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}.csv"
     save_static_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
+
+def motif_topology(distance_file, initial_distance_file, ground_station_positions, alpha, num_isls):
+    is_consistent_graph, df_graph, constellation_name, time_step, total_time, simulation_details, _, nodes, num_orbits, num_satellites = cdg.read_distance_file(distance_file)
+    consistent_distance_graph, satellite_nodes = df_graph, nodes
+    if not is_consistent_graph:
+        consistent_distance_graph, satellite_nodes = cdg.get_static_consistent_distance_graph(df_graph, distance_file, nodes, constellation_name, time_step, total_time)
+
+    base_graph = cdg.read_initial_satellite_distances(initial_distance_file, constellation_name)
+    ground_station_positions, ground_stations = cdg.read_ground_station_positions(ground_station_positions)
+    topology_graph = mtg.generate_motif_topology(base_graph, satellite_nodes, num_orbits, num_satellites, constellation_name, consistent_distance_graph, ground_stations, ground_station_positions, alpha, num_isls)
+
+    filename = f"MotifTopology#{datetime.today().strftime('%Y_%m_%d,%H_%M_%S')}#{simulation_details}#alpha({alpha}).csv"
+    save_static_topology_to_file(topology_graph, satellite_nodes, f'./input/{filename}')
     
 def riemannian_fields(cartesian_positions_file, source, destination, inclination, time_period, time_interval):
     splited_filename = cartesian_positions_file[:-4].split("#")
@@ -148,6 +162,7 @@ def riemannian_dynamic_topology(distance_file, cartesian_positions_file, demand_
 def printHelp():
     print("topology_generator.py --help")
     print("topology_generator.py --random_static [distance_file] [number of ISLs]")
+    print("topology_generator.py --motif [distance_file] [initial_distances] [ground_station_positions] [alpha] [number of ISLs]")
     print("topology_generator.py --riemannian_static [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)]")
     print("topology_generator.py --riemannian_dynamic [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)] [time_period(s)] [time_interval(s)]")
     print("topology_generator.py --riemannian_fields [cartesian_positions_file] [source] [destination] [inclination(deg)] [time_period(s)] [time_interval(s)]")
@@ -162,6 +177,8 @@ if __name__ == "__main__":
         printHelp() 
     elif sys.argv[1] == "--random_static" and len(sys.argv) == 4:
         random_static_topology(sys.argv[2], int(sys.argv[3]))
+    elif sys.argv[1] == "--motif" and len(sys.argv) == 7:
+        motif_topology(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]), int(sys.argv[6]))
     elif sys.argv[1] == "--riemannian_static" and len(sys.argv) == 7:
         riemannian_static_topology(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), float(sys.argv[6]))
     elif sys.argv[1] == "--riemannian_dynamic" and len(sys.argv) == 9:

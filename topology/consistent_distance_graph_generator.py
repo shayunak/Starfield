@@ -1,5 +1,6 @@
 import pandas as pd
 import networkx as nx
+from geopy.distance import geodesic
 
 def is_ground_station(node_id, constellation_name):
     splitted_id = node_id.split("-")
@@ -84,6 +85,41 @@ def read_distance_file(filename):
 
         print(f"Read dynamic consistent distance file '{filename}' with {len(nodes)} nodes, time step {time_step} ms, and total time {total_time} ms.")
         return True, graphs, constellation_name, time_step, total_time, simulation_details, time_interval, nodes, number_of_orbits, number_of_satellites_per_orbit
+
+def read_ground_station_positions(filename):
+    position_df = pd.read_csv(
+        f"./configs/{filename}",
+        engine="pyarrow",
+        sep=",",
+        dtype={
+            "Id": "string",
+            "Latitude": "float",
+            "Longitude": "float",
+        }                 
+    )
+    ground_stations = position_df['Id'].unique().tolist()
+    ground_station_positions = dict(zip(position_df['Id'], zip(position_df['Latitude'], position_df['Longitude'])))
+    
+    return ground_station_positions, ground_stations
+
+def read_initial_satellite_distances(filename, constellation_name):
+    distance_df = pd.read_csv(
+        f"./generated/{filename}",
+        engine="pyarrow",
+        sep=",",
+        dtype={
+            "FirstDeviceId": "string",
+            "SecondDeviceId": "string",
+            "Distance(m)": "int64"
+        }                 
+    )
+    G = nx.from_pandas_edgelist(
+    distance_df,
+    source='FirstDeviceId',
+    target='SecondDeviceId',
+    edge_attr='Distance(m)')
+    
+    return G
 
 def generate_general_satellite_graph_from_timestamp_data(time_stamp, dataframe, nodes, constellation_name):
     timestamp_data = dataframe.loc[dataframe['TimeStamp(ms)'] == time_stamp]
