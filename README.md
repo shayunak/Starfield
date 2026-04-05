@@ -131,12 +131,15 @@ The module analyzes traffic demand and shows latitude-longitude directions of ag
 The module generates inter-satellite topology for a regular number of ISLs. It needs distances or consistent distances file (in `./generated` folder), cartesian position file (in `./generated` folder), and demand file (in `./input` folder), and the inclination of the constellation. The output topology would be in the `./input` folder:
 > `python ./topology/topology_generator.py --random_static [distance_file] [number of ISLs]"`
 
-> `python ./topologytopology_generator.py --riemannian_static [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)]"`
+> `python ./topology/topology_generator.py --motif [distance_file] [initial_distances] [ground_station_positions] [alpha] [number of ISLs]`
 
-> `python ./topologytopology_generator.py --riemannian_dynamic [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)] [time_period(s)] [time_interval(s)]")`
+> `python ./topology/topology_generator.py --riemannian_static [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)]`
 
-> `python ./topologytopology_generator.py --riemannian_fields [cartesian_positions_file] [source] [destination] [inclination(deg)] [time_period(s)] [time_interval(s)]"`
+> `python ./topology/topology_generator.py --riemannian_dynamic [distance_file] [cartesian_positions_file] [demand_matrix_file] [number of ISLs] [inclination(deg)] [time_period(s)] [time_interval(s)]`
+
+> `python ./topology/topology_generator.py --riemannian_fields [cartesian_positions_file] [source] [destination] [inclination(deg)] [time_period(s)] [time_interval(s)]`
 - **--random_static:** A random topology based on random inter-orbital pattern matching, and intra-orbital choices
+- **--random_static:** A Motif-based topology proposed by [Bhattacherjee et. al.](https://dl-acm-org.proxy.lib.ohio-state.edu/doi/10.1145/3359989.3365407)
 - **--riemannian_static:** The Riemann metric based static topology generator
 - **--riemannian_dynamic:** The Riemann metric based dynamic topology generator for a period with time intervals
 - **--riemannian_fields:** The field, for Riemann metric, direction and magnitude calculator for a period with time intervals
