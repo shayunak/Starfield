@@ -1,0 +1,30 @@
+{
+    "name": "AmazonLEO",
+    "use_gpu": true,
+    "coordination_interval": 1.0,
+    "orbit_config": {
+        "earth_radius": 6378135.0,
+        "earth_rotation_period": 1.0,
+        "altitude": 630000.0,
+        "min_altitude_isl": 80000.0,
+        "inclination": 52,
+        "min_ascension_angle": 0.0,
+        "max_ascension_angle": 355.0,
+        "number_of_orbits": 34,
+        "number_of_satellites_per_orbit": 34,
+        "phase_diff_enabled": true
+    },
+    "satellite_config": {
+        "speed_of_light_vac": 299792458.0,
+        "mean_motion_rev_per_day": 14.82,
+        "min_elevation_angle": 25.0,
+        "number_of_isls": 4,
+        "isl_bandwidth": 1000000.0,
+        "isl_link_noise_coef": 1500.0,
+        "isl_acquisition_time": 12.0,
+        "gsl_bandwidth": 100000.0,
+        "gsl_link_noise_coef": 400.0,
+        "max_packet_size": 12.0,
+        "interface_buffer_size": 1000
+    }
+}
